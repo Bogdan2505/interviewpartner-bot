@@ -1,6 +1,7 @@
 package com.interviewpartner.bot.repository;
 
 import com.interviewpartner.bot.model.Interview;
+import com.interviewpartner.bot.model.InterviewStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -12,6 +13,14 @@ import java.util.stream.Collectors;
 public interface InterviewRepository extends JpaRepository<Interview, Long> {
 
     List<Interview> findByDateTimeBetween(LocalDateTime startInclusive, LocalDateTime endExclusive);
+
+    @Query("""
+            select i from Interview i
+            where (i.candidate.id = :userId or i.interviewer.id = :userId)
+              and (:status is null or i.status = :status)
+            order by i.dateTime desc
+            """)
+    List<Interview> findByUserIdAndOptionalStatus(@Param("userId") Long userId, @Param("status") InterviewStatus status);
 
     @Query("""
             select i from Interview i
