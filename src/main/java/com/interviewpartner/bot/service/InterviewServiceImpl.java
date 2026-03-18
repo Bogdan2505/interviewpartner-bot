@@ -23,6 +23,7 @@ public class InterviewServiceImpl implements InterviewService {
 
     private final InterviewRepository interviewRepository;
     private final UserRepository userRepository;
+    private final ScheduleService scheduleService;
 
     @Override
     public Interview createInterview(
@@ -59,8 +60,11 @@ public class InterviewServiceImpl implements InterviewService {
     @Override
     @Transactional(readOnly = true)
     public List<User> findAvailablePartners(Long userId, Language language, LocalDateTime dateTime) {
-        // MVP: фильтрация только по языку, без расписания. Расписание подключим в ScheduleService/подборе партнёра.
-        return userRepository.findByLanguageAndIdNot(language, userId);
+        return userRepository.findByLanguageAndIdNot(language, userId).stream()
+                .filter(u -> scheduleService.isUserAvailable(u.getId(), dateTime))
+                .filter(u -> interviewRepository.findConflictingInterviews(u.getId(), dateTime, 60).isEmpty())
+                .filter(u -> interviewRepository.findConflictingInterviews(userId, dateTime, 60).isEmpty())
+                .toList();
     }
 
     @Override

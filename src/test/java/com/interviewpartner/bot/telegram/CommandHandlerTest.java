@@ -64,6 +64,22 @@ class CommandHandlerTest {
         verify(unknownHandler).handle(update, telegramClient);
     }
 
+    @Test
+    void shouldRouteFindPartnerToFindPartnerHandler() {
+        BotCommandHandler findPartnerHandler = mock(BotCommandHandler.class);
+        whenCanHandle(findPartnerHandler, update -> {
+            if (!update.hasMessage() || !update.getMessage().hasText()) return false;
+            return update.getMessage().getText().strip().startsWith("/find_partner");
+        });
+
+        CommandHandler handler = new CommandHandler(new ArrayList<>(List.of(findPartnerHandler, unknownHandler)));
+        handler.init();
+
+        Update update = messageUpdate("/find_partner");
+        handler.handle(update, telegramClient);
+        verify(findPartnerHandler).handle(update, telegramClient);
+    }
+
     private static Update messageUpdate(String text) {
         Update update = mock(Update.class);
         Message message = mock(Message.class);

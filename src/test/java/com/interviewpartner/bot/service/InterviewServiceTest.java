@@ -22,7 +22,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DataJpaTest
 @ActiveProfiles("test")
-@Import({InterviewServiceImpl.class, UserServiceImpl.class})
+@Import({InterviewServiceImpl.class, UserServiceImpl.class, ScheduleServiceImpl.class})
 class InterviewServiceTest {
 
     @Autowired

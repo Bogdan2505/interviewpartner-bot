@@ -1,12 +1,12 @@
 package com.interviewpartner.bot.telegram;
 
 import com.interviewpartner.bot.model.User;
-import com.interviewpartner.bot.service.InterviewService;
+import com.interviewpartner.bot.service.ScheduleService;
 import com.interviewpartner.bot.service.UserService;
 import com.interviewpartner.bot.telegram.flow.ConversationStateService;
 import com.interviewpartner.bot.telegram.handler.CallbackQueryHandler;
-import com.interviewpartner.bot.telegram.handler.CreateInterviewCommandHandler;
-import com.interviewpartner.bot.telegram.handler.CreateInterviewMessageHandler;
+import com.interviewpartner.bot.telegram.handler.ScheduleCommandHandler;
+import com.interviewpartner.bot.telegram.handler.ScheduleMessageHandler;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
@@ -15,8 +15,6 @@ import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.message.Message;
 import org.telegram.telegrambots.meta.generics.TelegramClient;
 
-import java.util.Collections;
-
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
@@ -24,63 +22,50 @@ import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-class CreateInterviewFlowTest {
+class ScheduleFlowTest {
 
     private TelegramClient telegramClient;
     private ConversationStateService stateService;
-    private CreateInterviewCommandHandler commandHandler;
+    private ScheduleCommandHandler scheduleCommandHandler;
     private CallbackQueryHandler callbackQueryHandler;
-    private CreateInterviewMessageHandler messageHandler;
+    private ScheduleMessageHandler scheduleMessageHandler;
+    private ScheduleService scheduleService;
 
     @BeforeEach
     void setUp() {
         telegramClient = mock(TelegramClient.class);
         stateService = new ConversationStateService();
         UserService userService = mock(UserService.class);
-        User mockUser = mock(User.class);
-        when(mockUser.getId()).thenReturn(1L);
-        when(userService.registerUser(anyLong(), any())).thenReturn(mockUser);
-        InterviewService interviewService = mock(InterviewService.class);
-        when(interviewService.findAvailablePartners(anyLong(), any(), any())).thenReturn(Collections.emptyList());
-        commandHandler = new CreateInterviewCommandHandler(stateService, userService);
-        callbackQueryHandler = new CallbackQueryHandler(stateService, interviewService, mock(com.interviewpartner.bot.service.ScheduleService.class));
-        messageHandler = new CreateInterviewMessageHandler(stateService, interviewService);
+        User user = mock(User.class);
+        when(user.getId()).thenReturn(1L);
+        when(userService.registerUser(anyLong(), any())).thenReturn(user);
+
+        scheduleService = mock(ScheduleService.class);
+        scheduleCommandHandler = new ScheduleCommandHandler(userService, scheduleService, stateService);
+        callbackQueryHandler = new CallbackQueryHandler(stateService, mock(com.interviewpartner.bot.service.InterviewService.class), scheduleService);
+        scheduleMessageHandler = new ScheduleMessageHandler(stateService, scheduleService);
     }
 
     @Test
-    void createInterviewFlow_shouldAskLanguageThenFormatThenDateTimeThenDuration() throws Exception {
-        Update start = mockMessageUpdate(1L, "/create_interview");
-        commandHandler.handle(start, telegramClient);
+    void addSlotFlow_shouldAskDayThenTimeThenSave() throws Exception {
+        Update start = mockMessageUpdate(10L, "/schedule");
+        scheduleCommandHandler.handle(start, telegramClient);
         verify(telegramClient).execute(any(SendMessage.class));
         reset(telegramClient);
 
-        Update lang = mockCallbackUpdate(1L, "ci:lang:RUSSIAN");
-        callbackQueryHandler.handle(lang, telegramClient);
+        Update add = mockCallbackUpdate(10L, "sc:add");
+        callbackQueryHandler.handle(add, telegramClient);
         verify(telegramClient).execute(any(SendMessage.class));
         reset(telegramClient);
 
-        Update format = mockCallbackUpdate(1L, "ci:format:TECHNICAL");
-        callbackQueryHandler.handle(format, telegramClient);
+        Update day = mockCallbackUpdate(10L, "sc:day:MONDAY");
+        callbackQueryHandler.handle(day, telegramClient);
         verify(telegramClient).execute(any(SendMessage.class));
         reset(telegramClient);
 
-        Update dt = mockMessageUpdate(1L, "2026-03-25 19:00");
-        messageHandler.handle(dt, telegramClient);
-        verify(telegramClient).execute(any(SendMessage.class));
-        reset(telegramClient);
-
-        Update dur = mockMessageUpdate(1L, "60");
-        messageHandler.handle(dur, telegramClient);
-        verify(telegramClient).execute(any(SendMessage.class));
-        reset(telegramClient);
-
-        Update partner = mockCallbackUpdate(1L, "ci:partner:self");
-        callbackQueryHandler.handle(partner, telegramClient);
-        verify(telegramClient).execute(any(SendMessage.class));
-        reset(telegramClient);
-
-        Update confirm = mockCallbackUpdate(1L, "ci:confirm:yes");
-        callbackQueryHandler.handle(confirm, telegramClient);
+        Update time = mockMessageUpdate(10L, "10:00-12:00");
+        scheduleMessageHandler.handle(time, telegramClient);
+        verify(scheduleService).addAvailability(anyLong(), any(), any(), any());
         verify(telegramClient).execute(any(SendMessage.class));
     }
 

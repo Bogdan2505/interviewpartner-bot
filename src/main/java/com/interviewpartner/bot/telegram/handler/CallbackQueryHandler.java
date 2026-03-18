@@ -1,12 +1,17 @@
 package com.interviewpartner.bot.telegram.handler;
 
 import com.interviewpartner.bot.exception.InterviewConflictException;
+import com.interviewpartner.bot.exception.ScheduleOverlapException;
 import com.interviewpartner.bot.exception.UserNotFoundException;
 import com.interviewpartner.bot.model.InterviewFormat;
 import com.interviewpartner.bot.model.Language;
+import com.interviewpartner.bot.model.User;
 import com.interviewpartner.bot.service.InterviewService;
+import com.interviewpartner.bot.service.ScheduleService;
 import com.interviewpartner.bot.telegram.flow.ConversationStateService;
 import com.interviewpartner.bot.telegram.flow.CreateInterviewState;
+import com.interviewpartner.bot.telegram.flow.FindPartnerState;
+import com.interviewpartner.bot.telegram.flow.ScheduleState;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
@@ -19,6 +24,7 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKe
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.meta.generics.TelegramClient;
 
+import java.time.DayOfWeek;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
@@ -34,6 +40,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
 
     private final ConversationStateService stateService;
     private final InterviewService interviewService;
+    private final ScheduleService scheduleService;
 
     @Override
     public boolean canHandle(Update update) {
@@ -56,11 +63,19 @@ public class CallbackQueryHandler implements BotCommandHandler {
                 handleCreateInterviewCallback(chatId, safeData, telegramClient);
                 return;
             }
+            if (safeData.startsWith("fp:")) {
+                handleFindPartnerCallback(chatId, safeData, telegramClient);
+                return;
+            }
+            if (safeData.startsWith("sc:")) {
+                handleScheduleCallback(chatId, safeData, telegramClient);
+                return;
+            }
             String text = switch (safeData) {
                 case "cmd:create_interview" -> "Создание собеседования: используйте /create_interview.";
                 case "cmd:find_partner" -> "Поиск партнёра (в разработке). Используйте /find_partner.";
                 case "cmd:interviews" -> "Мои собеседования (в разработке). Используйте /interviews.";
-                case "cmd:schedule" -> "Расписание (в разработке). Используйте /schedule.";
+                case "cmd:schedule" -> "Расписание: используйте /schedule.";
                 case "cmd:help" -> "Используйте /help для справки по командам.";
                 default -> "Действие в разработке.";
             };
@@ -170,6 +185,107 @@ public class CallbackQueryHandler implements BotCommandHandler {
                 new InlineKeyboardRow(tech, beh),
                 new InlineKeyboardRow(cancel)
         );
+        return InlineKeyboardMarkup.builder().keyboard(rows).build();
+    }
+
+    private void handleFindPartnerCallback(Long chatId, String data, TelegramClient telegramClient) throws TelegramApiException {
+        if (data.equals("fp:cancel")) {
+            stateService.clearFindPartner(chatId);
+            telegramClient.execute(SendMessage.builder().chatId(chatId).text("Ок, отменил поиск партнёра.").build());
+            return;
+        }
+        FindPartnerState state = stateService.getFindPartner(chatId).orElse(null);
+        if (state == null) {
+            telegramClient.execute(SendMessage.builder().chatId(chatId).text("Сессия истекла. Начните заново: /find_partner").build());
+            return;
+        }
+        if (data.startsWith("fp:lang:")) {
+            state.language = Language.valueOf(data.substring("fp:lang:".length()));
+            state.step = FindPartnerState.Step.DATE_TIME;
+            telegramClient.execute(SendMessage.builder()
+                    .chatId(chatId)
+                    .text("Введите дату и время в формате: yyyy-MM-dd HH:mm (например 2026-03-25 19:00)")
+                    .build());
+            return;
+        }
+        if (data.startsWith("fp:pick:")) {
+            String payload = data.substring("fp:pick:".length());
+            telegramClient.execute(SendMessage.builder().chatId(chatId)
+                    .text("Партнёр выбран: " + payload + ". Дальше добавим отправку запроса/принятие-отклонение.")
+                    .build());
+            stateService.clearFindPartner(chatId);
+        }
+    }
+
+    private void handleScheduleCallback(Long chatId, String data, TelegramClient telegramClient) throws TelegramApiException {
+        if (data.equals("sc:close")) {
+            stateService.clearSchedule(chatId);
+            telegramClient.execute(SendMessage.builder().chatId(chatId).text("Ок.").build());
+            return;
+        }
+        ScheduleState state = stateService.getSchedule(chatId).orElse(null);
+        if (state == null) {
+            telegramClient.execute(SendMessage.builder().chatId(chatId).text("Сессия истекла. Откройте заново: /schedule").build());
+            return;
+        }
+        if (data.equals("sc:add")) {
+            state.step = ScheduleState.Step.ADD_DAY;
+            telegramClient.execute(SendMessage.builder()
+                    .chatId(chatId)
+                    .text("Выберите день недели.")
+                    .replyMarkup(dayKeyboard())
+                    .build());
+            return;
+        }
+        if (data.equals("sc:remove")) {
+            var slots = scheduleService.getUserSchedule(state.userId);
+            telegramClient.execute(SendMessage.builder()
+                    .chatId(chatId)
+                    .text(slots.isEmpty() ? "Удалять нечего — расписание пустое." : "Выберите слот для удаления:")
+                    .replyMarkup(removeKeyboard(slots))
+                    .build());
+            return;
+        }
+        if (data.startsWith("sc:day:")) {
+            state.dayOfWeek = DayOfWeek.valueOf(data.substring("sc:day:".length()));
+            state.step = ScheduleState.Step.ADD_TIME;
+            telegramClient.execute(SendMessage.builder()
+                    .chatId(chatId)
+                    .text("Введите время слота в формате HH:mm-HH:mm (например 10:00-12:00)")
+                    .build());
+            return;
+        }
+        if (data.startsWith("sc:del:")) {
+            Long id = Long.parseLong(data.substring("sc:del:".length()));
+            scheduleService.removeAvailability(id);
+            telegramClient.execute(SendMessage.builder().chatId(chatId).text("Слот удалён.").build());
+        }
+    }
+
+    private static InlineKeyboardMarkup dayKeyboard() {
+        List<InlineKeyboardRow> rows = List.of(
+                new InlineKeyboardRow(InlineKeyboardButton.builder().text("Пн").callbackData("sc:day:MONDAY").build(),
+                        InlineKeyboardButton.builder().text("Вт").callbackData("sc:day:TUESDAY").build(),
+                        InlineKeyboardButton.builder().text("Ср").callbackData("sc:day:WEDNESDAY").build()),
+                new InlineKeyboardRow(InlineKeyboardButton.builder().text("Чт").callbackData("sc:day:THURSDAY").build(),
+                        InlineKeyboardButton.builder().text("Пт").callbackData("sc:day:FRIDAY").build(),
+                        InlineKeyboardButton.builder().text("Сб").callbackData("sc:day:SATURDAY").build()),
+                new InlineKeyboardRow(InlineKeyboardButton.builder().text("Вс").callbackData("sc:day:SUNDAY").build(),
+                        InlineKeyboardButton.builder().text("Отмена").callbackData("sc:close").build())
+        );
+        return InlineKeyboardMarkup.builder().keyboard(rows).build();
+    }
+
+    private static InlineKeyboardMarkup removeKeyboard(List<com.interviewpartner.bot.model.Schedule> slots) {
+        List<InlineKeyboardRow> rows = slots.stream()
+                .map(s -> new InlineKeyboardRow(InlineKeyboardButton.builder()
+                        .text(s.getDayOfWeek() + " " + s.getStartTime() + "-" + s.getEndTime())
+                        .callbackData("sc:del:" + s.getId())
+                        .build()))
+                .toList();
+        if (rows.isEmpty()) {
+            rows = List.of(new InlineKeyboardRow(InlineKeyboardButton.builder().text("Закрыть").callbackData("sc:close").build()));
+        }
         return InlineKeyboardMarkup.builder().keyboard(rows).build();
     }
 }
