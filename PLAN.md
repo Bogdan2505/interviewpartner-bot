@@ -41,3 +41,18 @@
 - [x] InterviewRepository (findByDateTimeBetween, findConflictingInterviews)
 - [x] ScheduleRepository (findByUserId, findByUserIdAndDayOfWeek)
 
+## Этап 2: Сервисный слой
+
+### Задача 2.1: UserService
+- [x] registerUser / getUserByTelegramId / updateUserLanguage / updateUserLevel
+- [x] Тесты: регистрация, получение, обновление, not found
+
+### Задача 2.2: InterviewService
+- [x] createInterview (валидация пользователей, проверка конфликтов)
+- [x] cancelInterview / completeInterview
+- [x] Тесты: создание, конфликт времени, обновление статусов
+
+### Задача 2.3: ScheduleService
+- [x] addAvailability / removeAvailability / getUserSchedule / isUserAvailable
+- [x] Тесты: добавление, пересечения, доступность, удаление
+
