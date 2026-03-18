@@ -11,10 +11,10 @@
 - [x] Добавить тест загрузки контекста Spring
 
 ### Задача 0.2: Подключение Telegram Bot API
-- [ ] Добавить зависимость telegrambots-spring-boot-starter
-- [ ] Создать класс TelegramBot, наследуемый от TelegramLongPollingBot
-- [ ] Настроить токен бота через application.properties
-- [ ] Написать тест для проверки подключения к API
+- [x] Добавить зависимость telegrambots-springboot-longpolling-starter + client (7.11)
+- [x] Создать InterviewPartnerTelegramBot (SpringLongPollingBot + LongPollingUpdateConsumer)
+- [x] Настроить токен через TelegramBotProperties (application.properties)
+- [x] Бот не создаётся при пустом токене (тесты без сети)
 
 ### Задача 0.3: Настройка базы данных
 - [ ] Настроить H2 для разработки
@@ -55,4 +55,21 @@
 ### Задача 2.3: ScheduleService
 - [x] addAvailability / removeAvailability / getUserSchedule / isUserAvailable
 - [x] Тесты: добавление, пересечения, доступность, удаление
+
+## Этап 3: Telegram обработчики команд
+
+### Задача 3.1: Базовый обработчик
+- [x] CommandHandler: маршрутизация по canHandle(), сортировка по @Order
+- [x] Обработка неизвестных команд (UnknownCommandHandler)
+- [x] Тест маршрутизации (CommandHandlerTest)
+
+### Задача 3.2: Команда /start
+- [x] Приветственное сообщение
+- [x] Регистрация пользователя через UserService.registerUser
+- [x] Главное меню с inline-кнопками (create_interview, find_partner, interviews, schedule, help)
+- [x] CallbackQueryHandler для нажатий кнопок
+
+### Задачи 3.3–3.6: Остальные команды (заглушки)
+- [x] /create_interview, /find_partner, /interviews, /schedule, /help — ответ «в разработке»
+- [ ] Полный flow 3.3–3.6 по плану (пошаговые диалоги, календарь и т.д.)
 
