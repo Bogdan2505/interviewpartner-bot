@@ -8,10 +8,12 @@ import com.interviewpartner.bot.model.Language;
 import com.interviewpartner.bot.model.User;
 import com.interviewpartner.bot.service.InterviewService;
 import com.interviewpartner.bot.service.ScheduleService;
+import com.interviewpartner.bot.service.UserService;
 import com.interviewpartner.bot.telegram.flow.ConversationStateService;
 import com.interviewpartner.bot.telegram.flow.CreateInterviewState;
 import com.interviewpartner.bot.telegram.flow.FindPartnerState;
 import com.interviewpartner.bot.telegram.flow.ScheduleState;
+import com.interviewpartner.bot.service.request.InterviewRequestService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
@@ -25,6 +27,7 @@ import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.meta.generics.TelegramClient;
 
 import java.time.DayOfWeek;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
@@ -41,6 +44,8 @@ public class CallbackQueryHandler implements BotCommandHandler {
     private final ConversationStateService stateService;
     private final InterviewService interviewService;
     private final ScheduleService scheduleService;
+    private final UserService userService;
+    private final InterviewRequestService interviewRequestService;
 
     @Override
     public boolean canHandle(Update update) {
@@ -69,6 +74,10 @@ public class CallbackQueryHandler implements BotCommandHandler {
             }
             if (safeData.startsWith("sc:")) {
                 handleScheduleCallback(chatId, safeData, telegramClient);
+                return;
+            }
+            if (safeData.startsWith("ir:")) {
+                handleInterviewRequestCallback(chatId, safeData, telegramClient);
                 return;
             }
             String text = switch (safeData) {
@@ -209,12 +218,100 @@ public class CallbackQueryHandler implements BotCommandHandler {
             return;
         }
         if (data.startsWith("fp:pick:")) {
-            String payload = data.substring("fp:pick:".length());
-            telegramClient.execute(SendMessage.builder().chatId(chatId)
-                    .text("Партнёр выбран: " + payload + ". Дальше добавим отправку запроса/принятие-отклонение.")
+            Long partnerUserId = Long.parseLong(data.substring("fp:pick:".length()));
+            if (state.language == null || state.dateTime == null) {
+                telegramClient.execute(SendMessage.builder().chatId(chatId)
+                        .text("Недостаточно данных. Начните заново: /find_partner")
+                        .build());
+                stateService.clearFindPartner(chatId);
+                return;
+            }
+
+            var req = interviewRequestService.createRequest(
+                    state.requesterUserId,
+                    partnerUserId,
+                    state.language,
+                    InterviewFormat.TECHNICAL,
+                    state.dateTime,
+                    60
+            );
+
+            User partner = userService.getUserById(partnerUserId);
+            Long partnerChatId = partner.getTelegramId();
+
+            telegramClient.execute(SendMessage.builder()
+                    .chatId(partnerChatId)
+                    .text("Вам пришёл запрос на собеседование:\n"
+                            + "Язык: " + req.getLanguage() + "\n"
+                            + "Формат: " + req.getFormat() + "\n"
+                            + "Дата/время: " + DT_FORMAT.format(req.getDateTime()) + "\n"
+                            + "Длительность: " + req.getDurationMinutes() + " мин.\n\n"
+                            + "Принять?")
+                    .replyMarkup(requestKeyboard(req.getId()))
+                    .build());
+
+            telegramClient.execute(SendMessage.builder()
+                    .chatId(chatId)
+                    .text("Отправил запрос партнёру. Ожидайте ответа.")
                     .build());
             stateService.clearFindPartner(chatId);
         }
+    }
+
+    private void handleInterviewRequestCallback(Long chatId, String data, TelegramClient telegramClient) throws TelegramApiException {
+        // ir:accept:<id> / ir:decline:<id>
+        String[] parts = data.split(":", 3);
+        if (parts.length != 3) {
+            telegramClient.execute(SendMessage.builder().chatId(chatId).text("Некорректная заявка.").build());
+            return;
+        }
+        String action = parts[1];
+        Long requestId;
+        try {
+            requestId = Long.parseLong(parts[2]);
+        } catch (NumberFormatException e) {
+            telegramClient.execute(SendMessage.builder().chatId(chatId).text("Некорректная заявка.").build());
+            return;
+        }
+
+        if (action.equals("decline")) {
+            var req = interviewRequestService.decline(requestId, LocalDateTime.now());
+            telegramClient.execute(SendMessage.builder().chatId(chatId).text("Ок, отклонил.").build());
+            User candidate = userService.getUserById(req.getCandidate().getId());
+            telegramClient.execute(SendMessage.builder()
+                    .chatId(candidate.getTelegramId())
+                    .text("Партнёр отклонил запрос на собеседование.")
+                    .build());
+            return;
+        }
+        if (action.equals("accept")) {
+            var req = interviewRequestService.accept(requestId, LocalDateTime.now());
+            try {
+                interviewService.createInterview(
+                        req.getCandidate().getId(),
+                        req.getInterviewer().getId(),
+                        req.getLanguage(),
+                        req.getFormat(),
+                        req.getDateTime(),
+                        req.getDurationMinutes()
+                );
+                telegramClient.execute(SendMessage.builder().chatId(chatId).text("Принято. Собеседование создано.").build());
+                User candidate = userService.getUserById(req.getCandidate().getId());
+                telegramClient.execute(SendMessage.builder()
+                        .chatId(candidate.getTelegramId())
+                        .text("Партнёр принял запрос. Собеседование создано на " + DT_FORMAT.format(req.getDateTime()) + ".")
+                        .build());
+            } catch (InterviewConflictException e) {
+                telegramClient.execute(SendMessage.builder().chatId(chatId).text("Не могу принять: конфликт по времени.").build());
+            }
+        }
+    }
+
+    private static InlineKeyboardMarkup requestKeyboard(Long requestId) {
+        var accept = InlineKeyboardButton.builder().text("Принять").callbackData("ir:accept:" + requestId).build();
+        var decline = InlineKeyboardButton.builder().text("Отклонить").callbackData("ir:decline:" + requestId).build();
+        List<InlineKeyboardRow> rows = List.of(new InlineKeyboardRow(accept, decline));
+        return InlineKeyboardMarkup.builder().keyboard(rows).build();
     }
 
     private void handleScheduleCallback(Long chatId, String data, TelegramClient telegramClient) throws TelegramApiException {

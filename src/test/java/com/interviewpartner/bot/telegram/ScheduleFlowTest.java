@@ -3,6 +3,7 @@ package com.interviewpartner.bot.telegram;
 import com.interviewpartner.bot.model.User;
 import com.interviewpartner.bot.service.ScheduleService;
 import com.interviewpartner.bot.service.UserService;
+import com.interviewpartner.bot.service.request.InterviewRequestService;
 import com.interviewpartner.bot.telegram.flow.ConversationStateService;
 import com.interviewpartner.bot.telegram.handler.CallbackQueryHandler;
 import com.interviewpartner.bot.telegram.handler.ScheduleCommandHandler;
@@ -42,7 +43,13 @@ class ScheduleFlowTest {
 
         scheduleService = mock(ScheduleService.class);
         scheduleCommandHandler = new ScheduleCommandHandler(userService, scheduleService, stateService);
-        callbackQueryHandler = new CallbackQueryHandler(stateService, mock(com.interviewpartner.bot.service.InterviewService.class), scheduleService);
+        callbackQueryHandler = new CallbackQueryHandler(
+                stateService,
+                mock(com.interviewpartner.bot.service.InterviewService.class),
+                scheduleService,
+                userService,
+                mock(InterviewRequestService.class)
+        );
         scheduleMessageHandler = new ScheduleMessageHandler(stateService, scheduleService);
     }
 

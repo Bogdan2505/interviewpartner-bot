@@ -9,6 +9,8 @@ public interface UserService {
 
     User getUserByTelegramId(Long telegramId);
 
+    User getUserById(Long userId);
+
     User updateUserLanguage(Long userId, Language language);
 
     User updateUserLevel(Long userId, Level level);

@@ -3,6 +3,7 @@ package com.interviewpartner.bot.telegram;
 import com.interviewpartner.bot.model.User;
 import com.interviewpartner.bot.service.InterviewService;
 import com.interviewpartner.bot.service.UserService;
+import com.interviewpartner.bot.service.request.InterviewRequestService;
 import com.interviewpartner.bot.telegram.flow.ConversationStateService;
 import com.interviewpartner.bot.telegram.handler.CallbackQueryHandler;
 import com.interviewpartner.bot.telegram.handler.CreateInterviewCommandHandler;
@@ -43,7 +44,13 @@ class CreateInterviewFlowTest {
         InterviewService interviewService = mock(InterviewService.class);
         when(interviewService.findAvailablePartners(anyLong(), any(), any())).thenReturn(Collections.emptyList());
         commandHandler = new CreateInterviewCommandHandler(stateService, userService);
-        callbackQueryHandler = new CallbackQueryHandler(stateService, interviewService, mock(com.interviewpartner.bot.service.ScheduleService.class));
+        callbackQueryHandler = new CallbackQueryHandler(
+                stateService,
+                interviewService,
+                mock(com.interviewpartner.bot.service.ScheduleService.class),
+                userService,
+                mock(InterviewRequestService.class)
+        );
         messageHandler = new CreateInterviewMessageHandler(stateService, interviewService);
     }
 

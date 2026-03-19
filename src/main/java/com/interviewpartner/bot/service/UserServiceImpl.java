@@ -33,6 +33,13 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public User getUserById(Long userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new UserNotFoundException("User with id=" + userId + " not found"));
+    }
+
+    @Override
     public User updateUserLanguage(Long userId, Language language) {
         var user = userRepository.findById(userId)
                 .orElseThrow(() -> new UserNotFoundException("User with id=" + userId + " not found"));

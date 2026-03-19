@@ -14,6 +14,8 @@ public interface InterviewRepository extends JpaRepository<Interview, Long> {
 
     List<Interview> findByDateTimeBetween(LocalDateTime startInclusive, LocalDateTime endExclusive);
 
+    List<Interview> findByStatusAndDateTimeBetween(InterviewStatus status, LocalDateTime startInclusive, LocalDateTime endExclusive);
+
     @Query("""
             select i from Interview i
             where (i.candidate.id = :userId or i.interviewer.id = :userId)
