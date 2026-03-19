@@ -13,18 +13,21 @@ public class HelpCommandHandler implements BotCommandHandler {
 
     private static final String CMD = "/help";
     private static final String MESSAGE_RU = """
-            Команды бота:
-            /start — начать работу, главное меню
-            /create_interview — создать собеседование
-            /find_partner — найти партнёра
-            /interviews — мои собеседования
-            /schedule — моё расписание
-            /help — эта справка""";
+            Справка
+
+            • Записаться на собеседование — вы кандидат, вам подберут интервьюера.
+            • Провести собеседование — вы интервьюер, проводите встречу с кандидатом.
+            • Мои собеседования — ваши запланированные и прошедшие встречи.
+            • Моё расписание — когда вы свободны для собеседований.
+            • Помощь — эта подсказка.""";
 
     @Override
     public boolean canHandle(Update update) {
-        return update.hasMessage() && update.getMessage().hasText()
-                && update.getMessage().getText().strip().startsWith(CMD);
+        if (!update.hasMessage() || !update.getMessage().hasText()) {
+            return false;
+        }
+        String text = update.getMessage().getText().strip();
+        return text.startsWith(CMD) || text.equalsIgnoreCase(ChatMenuKeyboardBuilder.BTN_HELP);
     }
 
     @Override
@@ -33,6 +36,7 @@ public class HelpCommandHandler implements BotCommandHandler {
             telegramClient.execute(SendMessage.builder()
                     .chatId(update.getMessage().getChatId())
                     .text(MESSAGE_RU)
+                    .replyMarkup(ChatMenuKeyboardBuilder.buildPersistentKeyboard())
                     .build());
         } catch (TelegramApiException e) {
             throw new RuntimeException(e);

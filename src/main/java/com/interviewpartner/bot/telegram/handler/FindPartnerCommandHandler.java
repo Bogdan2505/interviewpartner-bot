@@ -22,15 +22,18 @@ import java.util.List;
 public class FindPartnerCommandHandler implements BotCommandHandler {
 
     private static final String CMD = "/find_partner";
-    private static final String MESSAGE_RU = "Поиск партнёра: выберите язык.";
+    private static final String MESSAGE_RU = "Поиск партнёра: выберите направление.";
 
     private final ConversationStateService stateService;
     private final UserService userService;
 
     @Override
     public boolean canHandle(Update update) {
-        return update.hasMessage() && update.getMessage().hasText()
-                && update.getMessage().getText().strip().startsWith(CMD);
+        if (!update.hasMessage() || !update.getMessage().hasText()) {
+            return false;
+        }
+        String text = update.getMessage().getText().strip();
+        return text.startsWith(CMD) || text.equalsIgnoreCase(ChatMenuKeyboardBuilder.BTN_FIND_PARTNER);
     }
 
     @Override
@@ -46,11 +49,11 @@ public class FindPartnerCommandHandler implements BotCommandHandler {
             Long telegramId = from.getId();
             String username = from.getUserName() != null ? from.getUserName() : from.getFirstName();
             User user = userService.registerUser(telegramId, username != null ? username : "user");
-            stateService.startFindPartner(chatId, user.getId());
+            stateService.startCreateInterview(chatId, user.getId(), false);
 
             telegramClient.execute(SendMessage.builder()
                     .chatId(chatId)
-                    .text(MESSAGE_RU)
+                    .text("Провести собеседование: выберите направление.")
                     .replyMarkup(languageKeyboard())
                     .build());
         } catch (TelegramApiException e) {
@@ -58,12 +61,22 @@ public class FindPartnerCommandHandler implements BotCommandHandler {
         }
     }
 
+    /** Общий flow с созданием собеседования — те же callback ci:lang:, ci:cancel. */
     private static InlineKeyboardMarkup languageKeyboard() {
-        var ru = InlineKeyboardButton.builder().text("Русский").callbackData("fp:lang:RUSSIAN").build();
-        var en = InlineKeyboardButton.builder().text("English").callbackData("fp:lang:ENGLISH").build();
-        var cancel = InlineKeyboardButton.builder().text("Отмена").callbackData("fp:cancel").build();
+        var java = InlineKeyboardButton.builder().text("Java").callbackData("ci:lang:JAVA").build();
+        var python = InlineKeyboardButton.builder().text("Python").callbackData("ci:lang:PYTHON").build();
+        var js = InlineKeyboardButton.builder().text("JavaScript").callbackData("ci:lang:JAVASCRIPT").build();
+        var go = InlineKeyboardButton.builder().text("Go").callbackData("ci:lang:GO").build();
+        var qa = InlineKeyboardButton.builder().text("QA").callbackData("ci:lang:QA").build();
+        var data = InlineKeyboardButton.builder().text("Data Analytics").callbackData("ci:lang:DATA_ANALYTICS").build();
+        var ba = InlineKeyboardButton.builder().text("Business Analysis").callbackData("ci:lang:BUSINESS_ANALYSIS").build();
+        var sa = InlineKeyboardButton.builder().text("System Analysis").callbackData("ci:lang:SYSTEM_ANALYSIS").build();
+        var cancel = InlineKeyboardButton.builder().text("Отмена").callbackData("ci:cancel").build();
         List<InlineKeyboardRow> rows = List.of(
-                new InlineKeyboardRow(ru, en),
+                new InlineKeyboardRow(java, python),
+                new InlineKeyboardRow(js, go),
+                new InlineKeyboardRow(qa, data),
+                new InlineKeyboardRow(ba, sa),
                 new InlineKeyboardRow(cancel)
         );
         return InlineKeyboardMarkup.builder().keyboard(rows).build();

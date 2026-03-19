@@ -31,8 +31,11 @@ public class ScheduleCommandHandler implements BotCommandHandler {
 
     @Override
     public boolean canHandle(Update update) {
-        return update.hasMessage() && update.getMessage().hasText()
-                && update.getMessage().getText().strip().startsWith(CMD);
+        if (!update.hasMessage() || !update.getMessage().hasText()) {
+            return false;
+        }
+        String text = update.getMessage().getText().strip();
+        return text.startsWith(CMD) || text.equalsIgnoreCase(ChatMenuKeyboardBuilder.BTN_SCHEDULE);
     }
 
     @Override
@@ -74,9 +77,9 @@ public class ScheduleCommandHandler implements BotCommandHandler {
 
     private static String render(List<Schedule> schedule) {
         if (schedule.isEmpty()) {
-            return "Ваше расписание пустое.\n\nДобавьте доступность, чтобы вас могли находить партнёры.";
+            return "Ваше расписание, когда вы готовы провести собеседование, пока пустое.\n\nДобавьте доступность, чтобы вас могли находить партнёры.";
         }
-        StringBuilder sb = new StringBuilder("Ваше расписание:\n");
+        StringBuilder sb = new StringBuilder("Ваше расписание, когда вы готовы провести собеседование:\n");
         for (Schedule s : schedule) {
             sb.append("- ").append(s.getDayOfWeek())
                     .append(" ").append(s.getStartTime())

@@ -22,14 +22,18 @@ import java.util.List;
 public class CreateInterviewCommandHandler implements BotCommandHandler {
 
     private static final String CMD = "/create_interview";
-    private static final String MESSAGE_RU = "Создание собеседования: выберите язык.";
+    private static final String MESSAGE_RU = "Создание собеседования: выберите направление.";
 
     private final ConversationStateService stateService;
     private final UserService userService;
 
     @Override
     public boolean canHandle(Update update) {
-        return hasCommand(update, CMD);
+        if (!update.hasMessage() || !update.getMessage().hasText()) {
+            return false;
+        }
+        String text = update.getMessage().getText().strip();
+        return text.startsWith(CMD) || text.equalsIgnoreCase(ChatMenuKeyboardBuilder.BTN_CREATE_INTERVIEW);
     }
 
     @Override
@@ -44,13 +48,8 @@ public class CreateInterviewCommandHandler implements BotCommandHandler {
         Long telegramId = from.getId();
         String username = from.getUserName() != null ? from.getUserName() : from.getFirstName();
         User user = userService.registerUser(telegramId, username != null ? username : "user");
-        stateService.startCreateInterview(chatId, user.getId());
+        stateService.startCreateInterview(chatId, user.getId(), true);
         send(chatId, MESSAGE_RU, telegramClient, buildLanguageKeyboard());
-    }
-
-    private static boolean hasCommand(Update update, String cmd) {
-        return update.hasMessage() && update.getMessage().hasText()
-                && update.getMessage().getText().strip().startsWith(cmd);
     }
 
     private static void send(Long chatId, String text, TelegramClient telegramClient, InlineKeyboardMarkup markup) {
@@ -66,11 +65,20 @@ public class CreateInterviewCommandHandler implements BotCommandHandler {
     }
 
     private static InlineKeyboardMarkup buildLanguageKeyboard() {
-        var ru = InlineKeyboardButton.builder().text("Русский").callbackData("ci:lang:RUSSIAN").build();
-        var en = InlineKeyboardButton.builder().text("English").callbackData("ci:lang:ENGLISH").build();
+        var java = InlineKeyboardButton.builder().text("Java").callbackData("ci:lang:JAVA").build();
+        var python = InlineKeyboardButton.builder().text("Python").callbackData("ci:lang:PYTHON").build();
+        var js = InlineKeyboardButton.builder().text("JavaScript").callbackData("ci:lang:JAVASCRIPT").build();
+        var go = InlineKeyboardButton.builder().text("Go").callbackData("ci:lang:GO").build();
+        var qa = InlineKeyboardButton.builder().text("QA").callbackData("ci:lang:QA").build();
+        var data = InlineKeyboardButton.builder().text("Data Analytics").callbackData("ci:lang:DATA_ANALYTICS").build();
+        var ba = InlineKeyboardButton.builder().text("Business Analysis").callbackData("ci:lang:BUSINESS_ANALYSIS").build();
+        var sa = InlineKeyboardButton.builder().text("System Analysis").callbackData("ci:lang:SYSTEM_ANALYSIS").build();
         var cancel = InlineKeyboardButton.builder().text("Отмена").callbackData("ci:cancel").build();
         List<InlineKeyboardRow> rows = List.of(
-                new InlineKeyboardRow(ru, en),
+                new InlineKeyboardRow(java, python),
+                new InlineKeyboardRow(js, go),
+                new InlineKeyboardRow(qa, data),
+                new InlineKeyboardRow(ba, sa),
                 new InlineKeyboardRow(cancel)
         );
         return InlineKeyboardMarkup.builder().keyboard(rows).build();

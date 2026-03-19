@@ -20,6 +20,7 @@ import java.util.Collections;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
@@ -88,7 +89,8 @@ class CreateInterviewFlowTest {
 
         Update confirm = mockCallbackUpdate(1L, "ci:confirm:yes");
         callbackQueryHandler.handle(confirm, telegramClient);
-        verify(telegramClient).execute(any(SendMessage.class));
+        // После подтверждения отправляются сообщение об успехе и главное меню
+        verify(telegramClient, atLeast(1)).execute(any(SendMessage.class));
     }
 
     private static Update mockMessageUpdate(Long chatId, String text) {

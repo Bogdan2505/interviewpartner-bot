@@ -30,8 +30,11 @@ public class InterviewsCommandHandler implements BotCommandHandler {
 
     @Override
     public boolean canHandle(Update update) {
-        return update.hasMessage() && update.getMessage().hasText()
-                && update.getMessage().getText().strip().startsWith(CMD);
+        if (!update.hasMessage() || !update.getMessage().hasText()) {
+            return false;
+        }
+        String text = update.getMessage().getText().strip();
+        return text.startsWith(CMD) || text.equalsIgnoreCase(ChatMenuKeyboardBuilder.BTN_MY_INTERVIEWS);
     }
 
     @Override
@@ -53,7 +56,11 @@ public class InterviewsCommandHandler implements BotCommandHandler {
 
         String text = render(upcoming, past);
         try {
-            telegramClient.execute(SendMessage.builder().chatId(chatId).text(text).build());
+            telegramClient.execute(SendMessage.builder()
+                    .chatId(chatId)
+                    .text(text)
+                    .replyMarkup(ChatMenuKeyboardBuilder.buildPersistentKeyboard())
+                    .build());
         } catch (TelegramApiException e) {
             throw new RuntimeException(e);
         }

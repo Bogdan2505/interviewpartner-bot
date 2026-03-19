@@ -28,6 +28,7 @@ public class UnknownCommandHandler implements BotCommandHandler {
         SendMessage send = SendMessage.builder()
                 .chatId(chatId)
                 .text(MESSAGE_RU)
+                .replyMarkup(ChatMenuKeyboardBuilder.buildPersistentKeyboard())
                 .build();
         try {
             telegramClient.execute(send);

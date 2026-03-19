@@ -39,6 +39,9 @@ public class CreateInterviewMessageHandler implements BotCommandHandler {
         if (!update.hasMessage() || !update.getMessage().hasText()) {
             return false;
         }
+        if (ChatMenuKeyboardBuilder.isMenuButton(update.getMessage().getText())) {
+            return false;
+        }
         Long chatId = update.getMessage().getChatId();
         return stateService.getCreateInterview(chatId).isPresent();
     }
@@ -94,7 +97,8 @@ public class CreateInterviewMessageHandler implements BotCommandHandler {
                 }
                 state.durationMinutes = duration;
                 state.step = CreateInterviewState.Step.PARTNER;
-                List<User> partners = interviewService.findAvailablePartners(state.candidateUserId, state.language, state.dateTime);
+                Long myId = state.asCandidate ? state.candidateUserId : state.interviewerUserId;
+                List<User> partners = interviewService.findAvailablePartners(myId, state.language, state.dateTime);
                 String partnerText = partners.isEmpty()
                         ? "Нет доступных партнёров по выбранным параметрам. Создать слот без партнёра (партнёр подберётся позже)?"
                         : "Выберите партнёра для собеседования:";

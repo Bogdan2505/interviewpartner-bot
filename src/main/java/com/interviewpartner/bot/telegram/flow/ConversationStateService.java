@@ -17,11 +17,22 @@ public class ConversationStateService {
     private final Map<Long, FindPartnerState> findPartnerStates = new ConcurrentHashMap<>();
     private final Map<Long, ScheduleState> scheduleStates = new ConcurrentHashMap<>();
 
-    public CreateInterviewState startCreateInterview(Long chatId, Long candidateUserId) {
+    /** Начать создание: как кандидат (true) или как интервьюер (false). */
+    public CreateInterviewState startCreateInterview(Long chatId, Long userId, boolean asCandidate) {
         var state = new CreateInterviewState();
-        state.candidateUserId = candidateUserId;
+        state.asCandidate = asCandidate;
+        if (asCandidate) {
+            state.candidateUserId = userId;
+        } else {
+            state.interviewerUserId = userId;
+        }
         createInterviewStates.put(chatId, state);
         return state;
+    }
+
+    @Deprecated
+    public CreateInterviewState startCreateInterview(Long chatId, Long candidateUserId) {
+        return startCreateInterview(chatId, candidateUserId, true);
     }
 
     public Optional<CreateInterviewState> getCreateInterview(Long chatId) {

@@ -9,11 +9,15 @@ import com.interviewpartner.bot.model.Language;
 import com.interviewpartner.bot.model.User;
 import com.interviewpartner.bot.repository.InterviewRepository;
 import com.interviewpartner.bot.repository.UserRepository;
+import com.interviewpartner.bot.service.dto.AvailableSlotDto;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 @Service
@@ -65,6 +69,53 @@ public class InterviewServiceImpl implements InterviewService {
                 .filter(u -> interviewRepository.findConflictingInterviews(u.getId(), dateTime, 60).isEmpty())
                 .filter(u -> interviewRepository.findConflictingInterviews(userId, dateTime, 60).isEmpty())
                 .toList();
+    }
+
+    private static final int SLOT_DURATION = 60;
+    private static final int MAX_SLOTS_RETURNED = 25;
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<AvailableSlotDto> getAvailableSlotsAsCandidate(Long candidateUserId, Language language, int daysAhead) {
+        LocalDate from = LocalDate.now();
+        LocalDate to = from.plusDays(daysAhead);
+        List<User> interviewers = userRepository.findByLanguageAndIdNot(language, candidateUserId);
+        List<AvailableSlotDto> out = new ArrayList<>();
+        for (User interviewer : interviewers) {
+            List<LocalDateTime> starts = scheduleService.getFreeSlotStarts(interviewer.getId(), from, to, SLOT_DURATION);
+            for (LocalDateTime start : starts) {
+                if (!scheduleService.isUserAvailable(candidateUserId, start)) continue;
+                if (interviewRepository.findConflictingInterviews(interviewer.getId(), start, SLOT_DURATION).isEmpty()
+                        && interviewRepository.findConflictingInterviews(candidateUserId, start, SLOT_DURATION).isEmpty()) {
+                    String label = interviewer.getUsername() != null ? "@" + interviewer.getUsername() : "User " + interviewer.getId();
+                    out.add(new AvailableSlotDto(start, interviewer.getId(), label));
+                    if (out.size() >= MAX_SLOTS_RETURNED) return out;
+                }
+            }
+        }
+        return out.stream().sorted(Comparator.comparing(AvailableSlotDto::dateTime)).toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<AvailableSlotDto> getAvailableSlotsAsInterviewer(Long interviewerUserId, Language language, int daysAhead) {
+        LocalDate from = LocalDate.now();
+        LocalDate to = from.plusDays(daysAhead);
+        List<User> candidates = userRepository.findByLanguageAndIdNot(language, interviewerUserId);
+        List<AvailableSlotDto> out = new ArrayList<>();
+        for (User candidate : candidates) {
+            List<LocalDateTime> starts = scheduleService.getFreeSlotStarts(candidate.getId(), from, to, SLOT_DURATION);
+            for (LocalDateTime start : starts) {
+                if (!scheduleService.isUserAvailable(interviewerUserId, start)) continue;
+                if (interviewRepository.findConflictingInterviews(candidate.getId(), start, SLOT_DURATION).isEmpty()
+                        && interviewRepository.findConflictingInterviews(interviewerUserId, start, SLOT_DURATION).isEmpty()) {
+                    String label = candidate.getUsername() != null ? "@" + candidate.getUsername() : "User " + candidate.getId();
+                    out.add(new AvailableSlotDto(start, candidate.getId(), label));
+                    if (out.size() >= MAX_SLOTS_RETURNED) return out;
+                }
+            }
+        }
+        return out.stream().sorted(Comparator.comparing(AvailableSlotDto::dateTime)).toList();
     }
 
     @Override

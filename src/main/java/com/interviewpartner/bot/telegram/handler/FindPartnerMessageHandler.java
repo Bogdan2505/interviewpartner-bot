@@ -36,6 +36,9 @@ public class FindPartnerMessageHandler implements BotCommandHandler {
         if (!update.hasMessage() || !update.getMessage().hasText()) {
             return false;
         }
+        if (ChatMenuKeyboardBuilder.isMenuButton(update.getMessage().getText())) {
+            return false;
+        }
         return stateService.getFindPartner(update.getMessage().getChatId()).isPresent();
     }
 

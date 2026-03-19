@@ -10,9 +10,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.DayOfWeek;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.TreeSet;
 
 @Service
 @RequiredArgsConstructor
@@ -69,6 +72,26 @@ public class ScheduleServiceImpl implements ScheduleService {
         return scheduleRepository.findByUserIdAndDayOfWeek(userId, day).stream()
                 .filter(s -> Boolean.TRUE.equals(s.getIsAvailable()))
                 .anyMatch(s -> !time.isBefore(s.getStartTime()) && time.isBefore(s.getEndTime()));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<LocalDateTime> getFreeSlotStarts(Long userId, LocalDate from, LocalDate to, int durationMinutes) {
+        List<Schedule> slots = scheduleRepository.findByUserId(userId);
+        var result = new TreeSet<LocalDateTime>();
+        for (LocalDate d = from; !d.isAfter(to); d = d.plusDays(1)) {
+            DayOfWeek day = d.getDayOfWeek();
+            for (Schedule s : slots) {
+                if (s.getDayOfWeek() != day || !Boolean.TRUE.equals(s.getIsAvailable())) continue;
+                LocalTime start = s.getStartTime();
+                LocalTime end = s.getEndTime();
+                if (start.plusMinutes(durationMinutes).isAfter(end)) continue;
+                for (LocalTime t = start; t.plusMinutes(durationMinutes).compareTo(end) <= 0; t = t.plusMinutes(60)) {
+                    result.add(d.atTime(t));
+                }
+            }
+        }
+        return new ArrayList<>(result);
     }
 
     private static boolean overlaps(LocalTime start1, LocalTime end1, LocalTime start2, LocalTime end2) {

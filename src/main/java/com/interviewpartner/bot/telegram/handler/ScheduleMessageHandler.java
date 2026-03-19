@@ -31,6 +31,9 @@ public class ScheduleMessageHandler implements BotCommandHandler {
         if (!update.hasMessage() || !update.getMessage().hasText()) {
             return false;
         }
+        if (ChatMenuKeyboardBuilder.isMenuButton(update.getMessage().getText())) {
+            return false;
+        }
         return stateService.getSchedule(update.getMessage().getChatId()).isPresent();
     }
 
