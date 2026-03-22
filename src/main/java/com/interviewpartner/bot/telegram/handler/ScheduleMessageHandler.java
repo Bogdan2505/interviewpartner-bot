@@ -12,6 +12,7 @@ import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.meta.generics.TelegramClient;
 
+import java.time.DayOfWeek;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -34,7 +35,10 @@ public class ScheduleMessageHandler implements BotCommandHandler {
         if (ChatMenuKeyboardBuilder.isMenuButton(update.getMessage().getText())) {
             return false;
         }
-        return stateService.getSchedule(update.getMessage().getChatId()).isPresent();
+        var stateOpt = stateService.getSchedule(update.getMessage().getChatId());
+        if (stateOpt.isEmpty() || stateOpt.get().step != ScheduleState.Step.ADD_TIME) return false;
+        var s = stateOpt.get();
+        return s.dayOfWeek != null || (s.selectedDaysForSlot != null && !s.selectedDaysForSlot.isEmpty());
     }
 
     @Override
@@ -43,7 +47,9 @@ public class ScheduleMessageHandler implements BotCommandHandler {
         var stateOpt = stateService.getSchedule(chatId);
         if (stateOpt.isEmpty()) return;
         var state = stateOpt.get();
-        if (state.step != ScheduleState.Step.ADD_TIME || state.dayOfWeek == null) return;
+        if (state.step != ScheduleState.Step.ADD_TIME) return;
+        boolean multiDay = state.selectedDaysForSlot != null && !state.selectedDaysForSlot.isEmpty();
+        if (state.dayOfWeek == null && !multiDay) return;
 
         String text = update.getMessage().getText().strip();
         var parts = text.split("-");
@@ -61,14 +67,33 @@ public class ScheduleMessageHandler implements BotCommandHandler {
             return;
         }
         try {
-            scheduleService.addAvailability(state.userId, state.dayOfWeek, start, end);
-            send(chatId, "Слот добавлен: " + state.dayOfWeek + " " + start + "-" + end, telegramClient);
+            if (multiDay) {
+                int added = 0;
+                DayOfWeek failedDay = null;
+                for (DayOfWeek d : state.selectedDaysForSlot) {
+                    try {
+                        scheduleService.addAvailability(state.userId, d, start, end);
+                        added++;
+                    } catch (ScheduleOverlapException e) {
+                        failedDay = d;
+                        break;
+                    }
+                }
+                if (failedDay != null) {
+                    send(chatId, "Добавлено для части дней. В " + failedDay + " это время пересекается с существующим — введите другое время.", telegramClient);
+                } else {
+                    stateService.clearSchedule(chatId);
+                    send(chatId, "Слоты добавлены: " + start + "–" + end + " для " + added + " дн.", telegramClient);
+                }
+            } else {
+                scheduleService.addAvailability(state.userId, state.dayOfWeek, start, end);
+                stateService.clearSchedule(chatId);
+                send(chatId, "Слот добавлен: " + state.dayOfWeek + " " + start + "-" + end, telegramClient);
+            }
         } catch (ScheduleOverlapException e) {
-            send(chatId, "Этот слот пересекается с существующим. Попробуйте другое время.", telegramClient);
+            if (!multiDay) send(chatId, "Этот слот пересекается с существующим. Попробуйте другое время.", telegramClient);
         } catch (IllegalArgumentException e) {
             send(chatId, "Конец должен быть позже начала. Попробуйте ещё раз.", telegramClient);
-        } finally {
-            stateService.clearSchedule(chatId);
         }
     }
 

@@ -23,6 +23,8 @@ import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.meta.api.methods.AnswerCallbackQuery;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
+import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageText;
+import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageReplyMarkup;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
@@ -31,10 +33,17 @@ import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.meta.generics.TelegramClient;
 
 import java.time.DayOfWeek;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Обрабатывает нажатия inline-кнопок (callback_data из главного меню и др.).
@@ -77,8 +86,14 @@ public class CallbackQueryHandler implements BotCommandHandler {
                 handleFindPartnerCallback(chatId, safeData, telegramClient);
                 return;
             }
+            if (safeData.startsWith("ic:")) {
+                Integer messageId = callback.getMessage() != null ? callback.getMessage().getMessageId() : null;
+                handleInterviewCalendarCallback(chatId, messageId, safeData, telegramClient);
+                return;
+            }
             if (safeData.startsWith("sc:")) {
-                handleScheduleCallback(chatId, safeData, telegramClient);
+                Integer messageId = callback.getMessage() != null ? callback.getMessage().getMessageId() : null;
+                handleScheduleCallback(chatId, messageId, safeData, telegramClient);
                 return;
             }
             if (safeData.startsWith("ir:")) {
@@ -96,6 +111,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
     }
 
     private void handleCreateInterviewCallback(Long chatId, String data, TelegramClient telegramClient) throws TelegramApiException {
+        if (data.equals("ci:noop")) return;
         if (data.equals("ci:cancel")) {
             stateService.clearCreateInterview(chatId);
             telegramClient.execute(SendMessage.builder().chatId(chatId).text("Ок, отменил создание собеседования.").build());
@@ -124,32 +140,114 @@ public class CallbackQueryHandler implements BotCommandHandler {
             List<AvailableSlotDto> slots = state.asCandidate
                     ? interviewService.getAvailableSlotsAsCandidate(state.candidateUserId, state.language, 14)
                     : interviewService.getAvailableSlotsAsInterviewer(state.interviewerUserId, state.language, 14);
-            if (!slots.isEmpty()) {
-                state.availableSlots = slots;
+            if (slots == null) slots = List.of();
+            state.availableSlots = slots;
+            state.step = CreateInterviewState.Step.VIEW_SLOT_DATES;
+            LocalDate firstSlotDate = slots.stream().map(s -> s.dateTime().toLocalDate()).min(LocalDate::compareTo).orElse(LocalDate.now());
+            state.slotCalendarYear = firstSlotDate.getYear();
+            state.slotCalendarMonth = firstSlotDate.getMonthValue();
+            String header = state.asCandidate
+                    ? "Выберите день в календаре (✓ — есть слоты). Затем выберите время по кнопкам (интервал 1 час)."
+                    : "Выберите день в календаре (✓ — есть слоты). Затем выберите время по кнопкам (интервал 1 час).";
+            telegramClient.execute(SendMessage.builder()
+                    .chatId(chatId)
+                    .text(header)
+                    .replyMarkup(slotCalendarKeyboard(slots, state.slotCalendarYear, state.slotCalendarMonth))
+                    .build());
+            return;
+        }
+
+        if (data.startsWith("ci:slotcalnav:")) {
+            String ym = data.substring("ci:slotcalnav:".length());
+            String[] parts = ym.split("-");
+            if (parts.length != 2) return;
+            state.slotCalendarYear = Integer.parseInt(parts[0]);
+            state.slotCalendarMonth = Integer.parseInt(parts[1]);
+            List<AvailableSlotDto> slots = state.availableSlots != null ? state.availableSlots : List.of();
+            telegramClient.execute(SendMessage.builder()
+                    .chatId(chatId)
+                    .text("Выберите день:")
+                    .replyMarkup(slotCalendarKeyboard(slots, state.slotCalendarYear, state.slotCalendarMonth))
+                    .build());
+            return;
+        }
+        if (data.startsWith("ci:slotdate:")) {
+            String dateStr = data.substring("ci:slotdate:".length());
+            state.selectedSlotDate = LocalDate.parse(dateStr);
+            String dayLabel = state.selectedSlotDate.format(DATE_BTN) + " (" + DAY_NAMES_RU[state.selectedSlotDate.getDayOfWeek().getValue() - 1] + ")";
+            List<AvailableSlotDto> forDate = state.availableSlots == null
+                    ? List.of()
+                    : state.availableSlots.stream()
+                    .filter(s -> s.dateTime().toLocalDate().equals(state.selectedSlotDate))
+                    .toList();
+            if (forDate.isEmpty()) {
                 state.step = CreateInterviewState.Step.VIEW_SLOTS;
-                String header = state.asCandidate ? "Доступные слоты (интервьюеры свободны):" : "Доступные слоты (кандидаты свободны):";
                 telegramClient.execute(SendMessage.builder()
                         .chatId(chatId)
-                        .text(header)
-                        .replyMarkup(slotsKeyboard(slots))
+                        .text("Выберите время на " + dayLabel + " (интервал 1 час):")
+                        .replyMarkup(timePickerKeyboard(state.selectedSlotDate))
                         .build());
             } else {
-                state.step = CreateInterviewState.Step.DATE_TIME;
+                state.step = CreateInterviewState.Step.VIEW_SLOTS;
                 telegramClient.execute(SendMessage.builder()
                         .chatId(chatId)
-                        .text("Нет подходящих слотов. Введите дату и время вручную: yyyy-MM-dd HH:mm (например 2026-03-25 19:00)")
+                        .text("Слоты на " + dayLabel + ". Выберите любое время:")
+                        .replyMarkup(slotsKeyboardForDate(state.availableSlots, state.selectedSlotDate))
                         .build());
             }
+            return;
+        }
+        if (data.startsWith("ci:time:")) {
+            String payload = data.substring("ci:time:".length());
+            String[] parts = payload.split(":", 2);
+            if (parts.length != 2) return;
+            LocalDate date;
+            int hour;
+            try {
+                date = LocalDate.parse(parts[0]);
+                hour = Integer.parseInt(parts[1]);
+            } catch (Exception e) {
+                return;
+            }
+            if (hour < 0 || hour > 23) return;
+            state.selectedSlotDate = date;
+            state.dateTime = date.atTime(hour, 0);
+            state.durationMinutes = 60;
+            state.step = CreateInterviewState.Step.PARTNER;
+            Long myId = state.asCandidate ? state.candidateUserId : state.interviewerUserId;
+            List<User> partners = interviewService.findAvailablePartners(myId, state.language, state.dateTime);
+            String partnerText = partners.isEmpty()
+                    ? "Нет доступных партнёров на это время. Создать слот без партнёра (подберётся позже)?"
+                    : "Выберите партнёра:";
+            telegramClient.execute(SendMessage.builder()
+                    .chatId(chatId)
+                    .text(partnerText)
+                    .replyMarkup(buildPartnerKeyboard(partners))
+                    .build());
             return;
         }
 
         if (data.startsWith("ci:slot:")) {
             String payload = data.substring("ci:slot:".length());
             if ("manual".equals(payload)) {
-                state.step = CreateInterviewState.Step.DATE_TIME;
+                state.step = CreateInterviewState.Step.VIEW_SLOT_DATES;
+                var now = LocalDate.now();
+                state.slotCalendarYear = now.getYear();
+                state.slotCalendarMonth = now.getMonthValue();
                 telegramClient.execute(SendMessage.builder()
                         .chatId(chatId)
-                        .text("Введите дату и время: yyyy-MM-dd HH:mm (например 2026-03-25 19:00)")
+                        .text("Выберите день в календаре, затем время:")
+                        .replyMarkup(slotCalendarKeyboard(state.availableSlots != null ? state.availableSlots : List.of(), state.slotCalendarYear, state.slotCalendarMonth))
+                        .build());
+                return;
+            }
+            if ("back".equals(payload)) {
+                state.step = CreateInterviewState.Step.VIEW_SLOT_DATES;
+                List<AvailableSlotDto> slots = state.availableSlots != null ? state.availableSlots : List.of();
+                telegramClient.execute(SendMessage.builder()
+                        .chatId(chatId)
+                        .text("Выберите день в календаре:")
+                        .replyMarkup(slotCalendarKeyboard(slots, state.slotCalendarYear, state.slotCalendarMonth))
                         .build());
                 return;
             }
@@ -223,7 +321,8 @@ public class CallbackQueryHandler implements BotCommandHandler {
                             state.language,
                             state.format,
                             state.dateTime,
-                            state.durationMinutes);
+                            state.durationMinutes,
+                            state.asCandidate);
                     telegramClient.execute(SendMessage.builder().chatId(chatId).text("Собеседование создано.").build());
                     stateService.clearCreateInterview(chatId);
                     sendMainMenu(chatId, telegramClient);
@@ -252,6 +351,119 @@ public class CallbackQueryHandler implements BotCommandHandler {
     }
 
     private static final DateTimeFormatter SLOT_LABEL = DateTimeFormatter.ofPattern("dd.MM HH:mm");
+    private static final DateTimeFormatter DATE_BTN = DateTimeFormatter.ofPattern("dd.MM");
+
+    private static final int QUICK_SLOTS_MAX = 12;
+
+    private static InlineKeyboardMarkup slotCalendarKeyboard(List<AvailableSlotDto> slots, int year, int month) {
+        if (slots == null) slots = List.of();
+        Set<LocalDate> datesWithSlots = slots.stream().map(s -> s.dateTime().toLocalDate()).collect(Collectors.toSet());
+        YearMonth ym = YearMonth.of(year, month);
+        List<InlineKeyboardRow> rows = new ArrayList<>();
+        String monthTitle = MONTH_NAMES_RU[month - 1] + " " + year;
+        YearMonth prev = ym.minusMonths(1);
+        YearMonth next = ym.plusMonths(1);
+        rows.add(new InlineKeyboardRow(
+                InlineKeyboardButton.builder().text("◀").callbackData("ci:slotcalnav:" + prev.getYear() + "-" + prev.getMonthValue()).build(),
+                InlineKeyboardButton.builder().text(monthTitle).callbackData("ci:noop").build(),
+                InlineKeyboardButton.builder().text("▶").callbackData("ci:slotcalnav:" + next.getYear() + "-" + next.getMonthValue()).build()
+        ));
+        rows.add(new InlineKeyboardRow(
+                InlineKeyboardButton.builder().text("Пн").callbackData("ci:noop").build(),
+                InlineKeyboardButton.builder().text("Вт").callbackData("ci:noop").build(),
+                InlineKeyboardButton.builder().text("Ср").callbackData("ci:noop").build(),
+                InlineKeyboardButton.builder().text("Чт").callbackData("ci:noop").build(),
+                InlineKeyboardButton.builder().text("Пт").callbackData("ci:noop").build(),
+                InlineKeyboardButton.builder().text("Сб").callbackData("ci:noop").build(),
+                InlineKeyboardButton.builder().text("Вс").callbackData("ci:noop").build()
+        ));
+        int firstDay = ym.atDay(1).getDayOfWeek().getValue();
+        int len = ym.lengthOfMonth();
+        List<InlineKeyboardButton> week = new ArrayList<>();
+        for (int i = 1; i < firstDay; i++) {
+            week.add(InlineKeyboardButton.builder().text(" ").callbackData("ci:noop").build());
+        }
+        for (int day = 1; day <= len; day++) {
+            LocalDate date = ym.atDay(day);
+            boolean hasSlots = datesWithSlots.contains(date);
+            String label = hasSlots ? day + " ✓" : String.valueOf(day);
+            week.add(InlineKeyboardButton.builder().text(label).callbackData("ci:slotdate:" + date).build());
+            if (week.size() == 7) {
+                rows.add(new InlineKeyboardRow(week));
+                week = new ArrayList<>();
+            }
+        }
+        if (!week.isEmpty()) {
+            while (week.size() < 7) week.add(InlineKeyboardButton.builder().text(" ").callbackData("ci:noop").build());
+            rows.add(new InlineKeyboardRow(week));
+        }
+        // Быстрый выбор: кнопки слотов текущего месяца (до QUICK_SLOTS_MAX)
+        List<InlineKeyboardButton> quickRow = new ArrayList<>();
+        int quickCount = 0;
+        for (int i = 0; i < slots.size() && quickCount < QUICK_SLOTS_MAX; i++) {
+            LocalDate d = slots.get(i).dateTime().toLocalDate();
+            if (d.getYear() != year || d.getMonthValue() != month) continue;
+            AvailableSlotDto s = slots.get(i);
+            String label = SLOT_LABEL.format(s.dateTime());
+            if (label.length() > 32) label = label.substring(0, 29) + "...";
+            quickRow.add(InlineKeyboardButton.builder().text(label).callbackData("ci:slot:" + i).build());
+            quickCount++;
+            if (quickRow.size() == 2) {
+                rows.add(new InlineKeyboardRow(quickRow));
+                quickRow = new ArrayList<>();
+            }
+        }
+        if (!quickRow.isEmpty()) rows.add(new InlineKeyboardRow(quickRow));
+        rows.add(new InlineKeyboardRow(InlineKeyboardButton.builder().text("Ввести дату вручную").callbackData("ci:slot:manual").build()));
+        return InlineKeyboardMarkup.builder().keyboard(rows).build();
+    }
+
+    private static final DateTimeFormatter TIME_LABEL = DateTimeFormatter.ofPattern("HH:mm");
+    private static final int TIME_PICKER_START_HOUR = 8;
+    private static final int TIME_PICKER_END_HOUR = 22;
+
+    private static InlineKeyboardMarkup timePickerKeyboard(LocalDate date) {
+        List<InlineKeyboardRow> rows = new ArrayList<>();
+        List<InlineKeyboardButton> row = new ArrayList<>();
+        for (int hour = TIME_PICKER_START_HOUR; hour < TIME_PICKER_END_HOUR; hour++) {
+            String label = LocalTime.of(hour, 0).format(TIME_LABEL);
+            row.add(InlineKeyboardButton.builder().text(label).callbackData("ci:time:" + date + ":" + hour).build());
+            if (row.size() == 4) {
+                rows.add(new InlineKeyboardRow(row));
+                row = new ArrayList<>();
+            }
+        }
+        if (!row.isEmpty()) rows.add(new InlineKeyboardRow(row));
+        rows.add(new InlineKeyboardRow(InlineKeyboardButton.builder().text("← Другой день").callbackData("ci:slot:back").build()));
+        return InlineKeyboardMarkup.builder().keyboard(rows).build();
+    }
+
+    private static InlineKeyboardMarkup buildPartnerKeyboard(List<User> partners) {
+        List<InlineKeyboardRow> rows = new ArrayList<>();
+        for (User u : partners) {
+            String label = u.getUsername() != null ? "@" + u.getUsername() : ("User " + u.getId());
+            if (label.length() > 64) label = label.substring(0, 61) + "...";
+            rows.add(new InlineKeyboardRow(
+                    InlineKeyboardButton.builder().text(label).callbackData("ci:partner:" + u.getId()).build()));
+        }
+        rows.add(new InlineKeyboardRow(
+                InlineKeyboardButton.builder().text("Создать слот без партнёра").callbackData("ci:partner:self").build()));
+        return InlineKeyboardMarkup.builder().keyboard(rows).build();
+    }
+
+    private static InlineKeyboardMarkup slotsKeyboardForDate(List<AvailableSlotDto> fullSlots, LocalDate date) {
+        List<InlineKeyboardRow> rows = new ArrayList<>();
+        for (int i = 0; i < fullSlots.size(); i++) {
+            AvailableSlotDto s = fullSlots.get(i);
+            if (!s.dateTime().toLocalDate().equals(date)) continue;
+            String label = SLOT_LABEL.format(s.dateTime()) + " — " + s.partnerLabel();
+            if (label.length() > 64) label = label.substring(0, 61) + "...";
+            rows.add(new InlineKeyboardRow(
+                    InlineKeyboardButton.builder().text(label).callbackData("ci:slot:" + i).build()));
+        }
+        rows.add(new InlineKeyboardRow(InlineKeyboardButton.builder().text("← Другой день").callbackData("ci:slot:back").build()));
+        return InlineKeyboardMarkup.builder().keyboard(rows).build();
+    }
 
     private static InlineKeyboardMarkup slotsKeyboard(List<AvailableSlotDto> slots) {
         List<InlineKeyboardRow> rows = new ArrayList<>();
@@ -378,7 +590,8 @@ public class CallbackQueryHandler implements BotCommandHandler {
                         req.getLanguage(),
                         req.getFormat(),
                         req.getDateTime(),
-                        req.getDurationMinutes()
+                        req.getDurationMinutes(),
+                        true
                 );
                 telegramClient.execute(SendMessage.builder().chatId(chatId).text("Принято. Собеседование создано.").build());
                 sendMainMenu(chatId, telegramClient);
@@ -393,6 +606,364 @@ public class CallbackQueryHandler implements BotCommandHandler {
                 sendMainMenu(chatId, telegramClient);
             }
         }
+    }
+
+    private enum CalendarRoleType {
+        CANDIDATE,
+        INTERVIEWER
+    }
+
+    private static final String ROLE_CANDIDATE = "🧑‍💻";
+    private static final String ROLE_INTERVIEWER = "🧑‍🏫";
+
+    /**
+     * Определяет роль пользователя в интервью.
+     * Для solo-слотов (когда оба поля указывают на одного пользователя)
+     * используется поле initiatorIsCandidate, сохранённое при создании.
+     */
+    private static CalendarRoleType resolveUserRole(com.interviewpartner.bot.model.Interview interview, Long userId) {
+        boolean isCandidate = interview.getCandidate() != null
+                && interview.getCandidate().getId() != null
+                && interview.getCandidate().getId().equals(userId);
+        boolean isInterviewer = interview.getInterviewer() != null
+                && interview.getInterviewer().getId() != null
+                && interview.getInterviewer().getId().equals(userId);
+        if (isCandidate && isInterviewer) {
+            return interview.isInitiatorIsCandidate() ? CalendarRoleType.CANDIDATE : CalendarRoleType.INTERVIEWER;
+        }
+        if (isInterviewer) return CalendarRoleType.INTERVIEWER;
+        return CalendarRoleType.CANDIDATE;
+    }
+
+    private void handleInterviewCalendarCallback(Long chatId, Integer messageId, String data, TelegramClient telegramClient) throws TelegramApiException {
+        if (data.equals("ic:noop")) return;
+
+        var state = stateService.getInterviewCalendar(chatId).orElse(null);
+        if (state == null) {
+            String text = "Сессия истекла. Откройте календарь заново: /schedule";
+            org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardMarkup markup = ChatMenuKeyboardBuilder.buildPersistentKeyboard();
+            if (messageId != null) {
+                telegramClient.execute(EditMessageText.builder()
+                        .chatId(chatId)
+                        .messageId(messageId)
+                        .text(text)
+                        .build());
+            } else {
+                telegramClient.execute(SendMessage.builder()
+                        .chatId(chatId)
+                        .text(text)
+                        .replyMarkup(markup)
+                        .build());
+            }
+            return;
+        }
+
+        if (data.equals("ic:close")) {
+            stateService.clearInterviewCalendar(chatId);
+            sendMainMenu(chatId, telegramClient);
+            return;
+        }
+
+        if (data.startsWith("ic:calnav:")) {
+            String ym = data.substring("ic:calnav:".length());
+            String[] parts = ym.split("-");
+            if (parts.length != 2) return;
+            int y = Integer.parseInt(parts[0]);
+            int m = Integer.parseInt(parts[1]);
+            state.calendarYear = y;
+            state.calendarMonth = m;
+            state.selectedDate = null;
+            showInterviewCalendarMonth(chatId, messageId, state.calendarYear, state.calendarMonth, state.userId, telegramClient);
+            return;
+        }
+
+        if (data.equals("ic:back")) {
+            state.selectedDate = null;
+            showInterviewCalendarMonth(chatId, messageId, state.calendarYear, state.calendarMonth, state.userId, telegramClient);
+            return;
+        }
+
+        if (data.startsWith("ic:day:")) {
+            String dateStr = data.substring("ic:day:".length());
+            LocalDate day = LocalDate.parse(dateStr);
+            state.selectedDate = day;
+
+            List<Interview> scheduled = interviewService.getUserInterviews(state.userId, InterviewStatus.SCHEDULED);
+            List<Interview> forDay = scheduled.stream()
+                    .filter(i -> i.getDateTime().toLocalDate().equals(day))
+                    .sorted(java.util.Comparator.comparing(Interview::getDateTime))
+                    .toList();
+            Map<Integer, EnumSet<CalendarRoleType>> hourRoles = new java.util.HashMap<>();
+            for (Interview i : forDay) {
+                int hour = i.getDateTime().getHour();
+                EnumSet<CalendarRoleType> roles = hourRoles.computeIfAbsent(hour, h -> EnumSet.noneOf(CalendarRoleType.class));
+                roles.add(resolveUserRole(i, state.userId));
+            }
+
+            java.time.format.DateTimeFormatter df = java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy");
+            String title = "Выберите время на " + day.format(df) + " (" + formatDayOfWeekRu(day.getDayOfWeek()) + ") (интервал 1 час):";
+
+            InlineKeyboardMarkup keyboard = timePickerKeyboard(day, hourRoles);
+
+            if (messageId != null) {
+                try {
+                    telegramClient.execute(EditMessageText.builder()
+                            .chatId(chatId)
+                            .messageId(messageId)
+                            .text(title)
+                            .replyMarkup(keyboard)
+                            .build());
+                } catch (TelegramApiException e) {
+                    telegramClient.execute(SendMessage.builder()
+                            .chatId(chatId)
+                            .text(title)
+                            .replyMarkup(keyboard)
+                            .build());
+                }
+            } else {
+                telegramClient.execute(SendMessage.builder()
+                        .chatId(chatId)
+                        .text(title)
+                        .replyMarkup(keyboard)
+                        .build());
+            }
+            return;
+        }
+
+        if (data.startsWith("ic:time:")) {
+            String payload = data.substring("ic:time:".length());
+            // payload: yyyy-MM-dd:HH
+            String[] parts = payload.split(":", 2);
+            if (parts.length != 2) return;
+            LocalDate day = LocalDate.parse(parts[0]);
+            int hour;
+            try {
+                hour = Integer.parseInt(parts[1]);
+            } catch (NumberFormatException e) {
+                return;
+            }
+
+            List<Interview> scheduled = interviewService.getUserInterviews(state.userId, InterviewStatus.SCHEDULED);
+            List<Interview> bookedList = scheduled.stream()
+                    .filter(i -> i.getDateTime().toLocalDate().equals(day))
+                    .filter(i -> i.getDateTime().getHour() == hour)
+                    .sorted(java.util.Comparator.comparing(Interview::getDateTime))
+                    .toList();
+
+            String text;
+            InlineKeyboardMarkup markup;
+            if (bookedList.isEmpty()) {
+                text = "На это время нет запланированных собеседований.";
+                markup = timeBackKeyboard(day);
+            } else {
+                java.time.format.DateTimeFormatter timeFmt = java.time.format.DateTimeFormatter.ofPattern("HH:mm");
+                StringBuilder sb = new StringBuilder();
+                for (Interview booked : bookedList) {
+                    boolean isCandidate = resolveUserRole(booked, state.userId) == CalendarRoleType.CANDIDATE;
+                    String youAction = isCandidate ? "ты проходишь собеседование" : "ты проводишь собеседование";
+                    String time = booked.getDateTime().format(timeFmt);
+                    if (sb.length() > 0) sb.append("\n");
+                    sb.append(youAction).append(" в ").append(time)
+                            .append(", ").append(booked.getLanguage())
+                            .append(", ").append(booked.getFormat())
+                            .append(", ").append(booked.getDuration()).append(" мин");
+                }
+                text = sb.toString();
+                markup = timeBackKeyboard(day);
+            }
+
+            if (messageId != null) {
+                try {
+                    telegramClient.execute(EditMessageText.builder()
+                            .chatId(chatId)
+                            .messageId(messageId)
+                            .text(text)
+                            .replyMarkup(markup)
+                            .build());
+                } catch (TelegramApiException e) {
+                    telegramClient.execute(SendMessage.builder()
+                            .chatId(chatId)
+                            .text(text)
+                            .replyMarkup(markup)
+                            .build());
+                }
+            } else {
+                telegramClient.execute(SendMessage.builder()
+                        .chatId(chatId)
+                        .text(text)
+                        .replyMarkup(markup)
+                        .build());
+            }
+            return;
+        }
+    }
+
+    private void showInterviewCalendarMonth(Long chatId, Integer messageId, int year, int month, Long userId, TelegramClient telegramClient) throws TelegramApiException {
+        List<Interview> scheduled = interviewService.getUserInterviews(userId, InterviewStatus.SCHEDULED);
+        InlineKeyboardMarkup keyboard = calendarMonthKeyboard(year, month, userId, scheduled);
+
+        java.time.format.DateTimeFormatter df = java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy");
+        java.time.LocalDate first = YearMonth.of(year, month).atDay(1);
+        String text = "ТЫКАЙТЕ НА ДЕНЬ С СОБЕСЕДОВАНИЯМИ (" + df.format(first) + " и далее).";
+
+        if (messageId != null) {
+            try {
+                telegramClient.execute(EditMessageText.builder()
+                        .chatId(chatId)
+                        .messageId(messageId)
+                        .text(text)
+                        .replyMarkup(keyboard)
+                        .build());
+            } catch (TelegramApiException e) {
+                telegramClient.execute(SendMessage.builder()
+                        .chatId(chatId)
+                        .text(text)
+                        .replyMarkup(keyboard)
+                        .build());
+            }
+        } else {
+            telegramClient.execute(SendMessage.builder()
+                    .chatId(chatId)
+                    .text(text)
+                    .replyMarkup(keyboard)
+                    .build());
+        }
+    }
+
+    private InlineKeyboardMarkup dayBackKeyboard() {
+        return InlineKeyboardMarkup.builder()
+                .keyboard(List.of(
+                        new InlineKeyboardRow(
+                                InlineKeyboardButton.builder().text("⬅️ Календарь").callbackData("ic:back").build()
+                        )
+                ))
+                .build();
+    }
+
+    private InlineKeyboardMarkup calendarMonthKeyboard(int year, int month, Long userId, List<Interview> scheduled) {
+        YearMonth ym = YearMonth.of(year, month);
+
+        Map<LocalDate, EnumSet<CalendarRoleType>> rolesByDate = new java.util.HashMap<>();
+        for (Interview i : scheduled) {
+            if (i.getDateTime() == null) continue;
+            LocalDate d = i.getDateTime().toLocalDate();
+            if (d.getYear() != year || d.getMonthValue() != month) continue;
+
+            rolesByDate.computeIfAbsent(d, k -> EnumSet.noneOf(CalendarRoleType.class));
+            rolesByDate.get(d).add(resolveUserRole(i, userId));
+        }
+
+        List<InlineKeyboardRow> rows = new ArrayList<>();
+        String monthTitle = MONTH_NAMES_RU[month - 1] + " " + year;
+
+        YearMonth prev = ym.minusMonths(1);
+        YearMonth next = ym.plusMonths(1);
+        rows.add(new InlineKeyboardRow(
+                InlineKeyboardButton.builder().text("◀").callbackData("ic:calnav:" + prev.getYear() + "-" + prev.getMonthValue()).build(),
+                InlineKeyboardButton.builder().text(monthTitle).callbackData("ic:noop").build(),
+                InlineKeyboardButton.builder().text("▶").callbackData("ic:calnav:" + next.getYear() + "-" + next.getMonthValue()).build()
+        ));
+
+        rows.add(new InlineKeyboardRow(
+                InlineKeyboardButton.builder().text("Пн").callbackData("ic:noop").build(),
+                InlineKeyboardButton.builder().text("Вт").callbackData("ic:noop").build(),
+                InlineKeyboardButton.builder().text("Ср").callbackData("ic:noop").build(),
+                InlineKeyboardButton.builder().text("Чт").callbackData("ic:noop").build(),
+                InlineKeyboardButton.builder().text("Пт").callbackData("ic:noop").build(),
+                InlineKeyboardButton.builder().text("Сб").callbackData("ic:noop").build(),
+                InlineKeyboardButton.builder().text("Вс").callbackData("ic:noop").build()
+        ));
+
+        int firstDay = ym.atDay(1).getDayOfWeek().getValue();
+        int len = ym.lengthOfMonth();
+        List<InlineKeyboardButton> week = new ArrayList<>();
+        for (int i = 1; i < firstDay; i++) {
+            week.add(InlineKeyboardButton.builder().text(" ").callbackData("ic:noop").build());
+        }
+
+        for (int day = 1; day <= len; day++) {
+            LocalDate date = ym.atDay(day);
+            EnumSet<CalendarRoleType> roles = rolesByDate.getOrDefault(date, EnumSet.noneOf(CalendarRoleType.class));
+
+            String label = buildDayLabelForCalendar(day, roles);
+            week.add(InlineKeyboardButton.builder().text(label).callbackData("ic:day:" + date).build());
+            if (week.size() == 7) {
+                rows.add(new InlineKeyboardRow(week));
+                week = new ArrayList<>();
+            }
+        }
+
+        if (!week.isEmpty()) {
+            while (week.size() < 7) week.add(InlineKeyboardButton.builder().text(" ").callbackData("ic:noop").build());
+            rows.add(new InlineKeyboardRow(week));
+        }
+
+        rows.add(new InlineKeyboardRow(
+                InlineKeyboardButton.builder().text("Закрыть").callbackData("ic:close").build()
+        ));
+
+        return InlineKeyboardMarkup.builder().keyboard(rows).build();
+    }
+
+    private static String buildDayLabelForCalendar(int day, EnumSet<CalendarRoleType> roles) {
+        if (roles == null || roles.isEmpty()) return String.valueOf(day);
+        StringBuilder sb = new StringBuilder();
+        sb.append(day);
+        if (roles.contains(CalendarRoleType.CANDIDATE)) sb.append(" ").append(ROLE_CANDIDATE);
+        if (roles.contains(CalendarRoleType.INTERVIEWER)) sb.append(" ").append(ROLE_INTERVIEWER);
+        return sb.toString();
+    }
+
+    private InlineKeyboardMarkup timePickerKeyboard(LocalDate date, Map<Integer, EnumSet<CalendarRoleType>> hourRoles) {
+        List<InlineKeyboardRow> rows = new ArrayList<>();
+        List<InlineKeyboardButton> row = new ArrayList<>();
+
+        for (int hour = TIME_PICKER_START_HOUR; hour < TIME_PICKER_END_HOUR; hour++) {
+            EnumSet<CalendarRoleType> roles = hourRoles != null
+                    ? hourRoles.getOrDefault(hour, EnumSet.noneOf(CalendarRoleType.class))
+                    : EnumSet.noneOf(CalendarRoleType.class);
+            String label = buildHourLabel(hour, roles);
+            row.add(InlineKeyboardButton.builder()
+                    .text(label)
+                    .callbackData("ic:time:" + date + ":" + hour)
+                    .build());
+            if (row.size() == 4) {
+                rows.add(new InlineKeyboardRow(row));
+                row = new ArrayList<>();
+            }
+        }
+        if (!row.isEmpty()) rows.add(new InlineKeyboardRow(row));
+
+        rows.add(new InlineKeyboardRow(InlineKeyboardButton.builder()
+                .text("⬅️ Другой день")
+                .callbackData("ic:back")
+                .build()));
+
+        return InlineKeyboardMarkup.builder().keyboard(rows).build();
+    }
+
+    private static String buildHourLabel(int hour, EnumSet<CalendarRoleType> roles) {
+        if (roles == null || roles.isEmpty()) {
+            return LocalTime.of(hour, 0).format(TIME_LABEL);
+        }
+        StringBuilder sb = new StringBuilder();
+        if (roles.contains(CalendarRoleType.CANDIDATE)) sb.append(ROLE_CANDIDATE);
+        if (roles.contains(CalendarRoleType.INTERVIEWER)) {
+            if (sb.length() > 0) sb.append(" ");
+            sb.append(ROLE_INTERVIEWER);
+        }
+        return sb.toString();
+    }
+
+    private InlineKeyboardMarkup timeBackKeyboard(LocalDate date) {
+        return InlineKeyboardMarkup.builder().keyboard(List.of(
+                new InlineKeyboardRow(
+                        InlineKeyboardButton.builder()
+                                .text("⬅️ К слотам")
+                                .callbackData("ic:day:" + date)
+                                .build()
+                )
+        )).build();
     }
 
     private void handleMainMenuCallback(Long chatId, String data, org.telegram.telegrambots.meta.api.objects.User fromTelegram, TelegramClient telegramClient) throws TelegramApiException {
@@ -421,17 +992,10 @@ public class CallbackQueryHandler implements BotCommandHandler {
                         .replyMarkup(createInterviewLanguageKeyboard())
                         .build());
             }
-            case "cmd:interviews" -> {
-                String interviewsText = buildInterviewsText(user.getId());
-                telegramClient.execute(SendMessage.builder()
-                        .chatId(chatId)
-                        .text(interviewsText)
-                        .replyMarkup(ChatMenuKeyboardBuilder.buildPersistentKeyboard())
-                        .build());
-            }
             case "cmd:schedule" -> {
-                stateService.startSchedule(chatId, user.getId());
-                sendScheduleMenu(chatId, user.getId(), telegramClient);
+                stateService.startInterviewCalendar(chatId, user.getId());
+                var st = stateService.getInterviewCalendar(chatId).orElseThrow();
+                showInterviewCalendarMonth(chatId, null, st.calendarYear, st.calendarMonth, user.getId(), telegramClient);
             }
             case "cmd:help" -> {
                 String helpText = """
@@ -439,8 +1003,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
 
                         • Записаться на собеседование — вы кандидат, вам подберут интервьюера.
                         • Провести собеседование — вы интервьюер, проводите встречу с кандидатом.
-                        • Мои собеседования — ваши запланированные и прошедшие встречи.
-                        • Моё расписание — когда вы свободны для собеседований.
+                        • Расписание — календарь ваших запланированных собеседований по ролям.
                         • Помощь — эта подсказка.""";
                 telegramClient.execute(SendMessage.builder()
                         .chatId(chatId)
@@ -575,7 +1138,8 @@ public class CallbackQueryHandler implements BotCommandHandler {
         return InlineKeyboardMarkup.builder().keyboard(rows).build();
     }
 
-    private void handleScheduleCallback(Long chatId, String data, TelegramClient telegramClient) throws TelegramApiException {
+    private void handleScheduleCallback(Long chatId, Integer messageId, String data, TelegramClient telegramClient) throws TelegramApiException {
+        if (data.equals("sc:noop")) return;
         if (data.equals("sc:close")) {
             stateService.clearSchedule(chatId);
             telegramClient.execute(SendMessage.builder().chatId(chatId).text("Ок.").build());
@@ -588,11 +1152,62 @@ public class CallbackQueryHandler implements BotCommandHandler {
             return;
         }
         if (data.equals("sc:add")) {
-            state.step = ScheduleState.Step.ADD_DAY;
+            var now = YearMonth.now();
+            state.calendarYear = now.getYear();
+            state.calendarMonth = now.getMonthValue();
+            state.selectedDaysForSlot.clear();
+            state.step = ScheduleState.Step.CALENDAR;
             telegramClient.execute(SendMessage.builder()
                     .chatId(chatId)
-                    .text("Выберите день недели.")
-                    .replyMarkup(dayKeyboard())
+                    .text("Тыкайте на дни — отмечены ✓. Потом нажмите «Задать время» (слоты повторяются еженедельно).")
+                    .replyMarkup(calendarMonthKeyboard(state.calendarYear, state.calendarMonth, state.userId, state.selectedDaysForSlot))
+                    .build());
+            return;
+        }
+        if (data.startsWith("sc:calnav:")) {
+            String ym = data.substring("sc:calnav:".length());
+            String[] parts = ym.split("-");
+            if (parts.length != 2) return;
+            int y = Integer.parseInt(parts[0]);
+            int m = Integer.parseInt(parts[1]);
+            state.calendarYear = y;
+            state.calendarMonth = m;
+            InlineKeyboardMarkup keyboard = calendarMonthKeyboard(state.calendarYear, state.calendarMonth, state.userId, state.selectedDaysForSlot);
+            if (messageId != null) {
+                telegramClient.execute(EditMessageReplyMarkup.builder().chatId(chatId).messageId(messageId).replyMarkup(keyboard).build());
+            } else {
+                telegramClient.execute(SendMessage.builder().chatId(chatId).text("Выберите день:").replyMarkup(keyboard).build());
+            }
+            return;
+        }
+        if (data.startsWith("sc:calday:")) {
+            String dateStr = data.substring("sc:calday:".length());
+            LocalDate day = LocalDate.parse(dateStr);
+            DayOfWeek w = day.getDayOfWeek();
+            if (state.selectedDaysForSlot.contains(w)) {
+                state.selectedDaysForSlot.remove(w);
+            } else {
+                state.selectedDaysForSlot.add(w);
+            }
+            InlineKeyboardMarkup keyboard = calendarMonthKeyboard(state.calendarYear, state.calendarMonth, state.userId, state.selectedDaysForSlot);
+            if (messageId != null) {
+                telegramClient.execute(EditMessageReplyMarkup.builder().chatId(chatId).messageId(messageId).replyMarkup(keyboard).build());
+            } else {
+                telegramClient.execute(SendMessage.builder().chatId(chatId).text("Выберите день:").replyMarkup(keyboard).build());
+            }
+            return;
+        }
+        if (data.equals("sc:calconfirm")) {
+            if (state.selectedDaysForSlot.isEmpty()) {
+                telegramClient.execute(SendMessage.builder().chatId(chatId).text("Сначала отметьте дни в календаре.").build());
+                return;
+            }
+            state.step = ScheduleState.Step.ADD_TIME;
+            state.dayOfWeek = null;
+            String daysStr = state.selectedDaysForSlot.stream().sorted().map(CallbackQueryHandler::formatDayOfWeekRu).reduce((a, b) -> a + ", " + b).orElse("");
+            telegramClient.execute(SendMessage.builder()
+                    .chatId(chatId)
+                    .text("Введите время для выбранных дней (" + daysStr + ") в формате HH:mm-HH:mm (например 10:00-12:00):")
                     .build());
             return;
         }
@@ -620,6 +1235,67 @@ public class CallbackQueryHandler implements BotCommandHandler {
             telegramClient.execute(SendMessage.builder().chatId(chatId).text("Слот удалён.").build());
             sendScheduleMenu(chatId, state.userId, telegramClient);
         }
+    }
+
+    private static final String[] DAY_NAMES_RU = new String[]{"Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"};
+    private static final String[] MONTH_NAMES_RU = new String[]{"Янв", "Фев", "Мар", "Апр", "Май", "Июн", "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек"};
+
+    private static String formatDayOfWeekRu(DayOfWeek d) {
+        return DAY_NAMES_RU[d.getValue() - 1];
+    }
+
+    private InlineKeyboardMarkup calendarMonthKeyboard(int year, int month, Long userId, Set<DayOfWeek> selectedDays) {
+        if (selectedDays == null) selectedDays = Set.of();
+        YearMonth ym = YearMonth.of(year, month);
+        Set<DayOfWeek> daysWithSlots = scheduleService.getUserSchedule(userId).stream()
+                .map(Schedule::getDayOfWeek)
+                .collect(Collectors.toSet());
+        List<InlineKeyboardRow> rows = new ArrayList<>();
+        String monthTitle = MONTH_NAMES_RU[month - 1] + " " + year;
+        YearMonth prev = ym.minusMonths(1);
+        YearMonth next = ym.plusMonths(1);
+        rows.add(new InlineKeyboardRow(
+                InlineKeyboardButton.builder().text("◀").callbackData("sc:calnav:" + prev.getYear() + "-" + prev.getMonthValue()).build(),
+                InlineKeyboardButton.builder().text(monthTitle).callbackData("sc:noop").build(),
+                InlineKeyboardButton.builder().text("▶").callbackData("sc:calnav:" + next.getYear() + "-" + next.getMonthValue()).build()
+        ));
+        rows.add(new InlineKeyboardRow(
+                InlineKeyboardButton.builder().text("Пн").callbackData("sc:noop").build(),
+                InlineKeyboardButton.builder().text("Вт").callbackData("sc:noop").build(),
+                InlineKeyboardButton.builder().text("Ср").callbackData("sc:noop").build(),
+                InlineKeyboardButton.builder().text("Чт").callbackData("sc:noop").build(),
+                InlineKeyboardButton.builder().text("Пт").callbackData("sc:noop").build(),
+                InlineKeyboardButton.builder().text("Сб").callbackData("sc:noop").build(),
+                InlineKeyboardButton.builder().text("Вс").callbackData("sc:noop").build()
+        ));
+        int firstDay = ym.atDay(1).getDayOfWeek().getValue();
+        int len = ym.lengthOfMonth();
+        List<InlineKeyboardButton> week = new ArrayList<>();
+        for (int i = 1; i < firstDay; i++) {
+            week.add(InlineKeyboardButton.builder().text(" ").callbackData("sc:noop").build());
+        }
+        for (int day = 1; day <= len; day++) {
+            LocalDate date = ym.atDay(day);
+            DayOfWeek w = date.getDayOfWeek();
+            boolean marked = daysWithSlots.contains(w) || selectedDays.contains(w);
+            String label = marked ? day + " ✓" : String.valueOf(day);
+            week.add(InlineKeyboardButton.builder().text(label).callbackData("sc:calday:" + date).build());
+            if (week.size() == 7) {
+                rows.add(new InlineKeyboardRow(week));
+                week = new ArrayList<>();
+            }
+        }
+        if (!week.isEmpty()) {
+            while (week.size() < 7) week.add(InlineKeyboardButton.builder().text(" ").callbackData("sc:noop").build());
+            rows.add(new InlineKeyboardRow(week));
+        }
+        if (!selectedDays.isEmpty()) {
+            int n = selectedDays.size();
+            String btnText = n == 1 ? "Задать время (1 день)" : "Задать время (" + n + " дн.)";
+            rows.add(new InlineKeyboardRow(InlineKeyboardButton.builder().text(btnText).callbackData("sc:calconfirm").build()));
+        }
+        rows.add(new InlineKeyboardRow(InlineKeyboardButton.builder().text("Отмена").callbackData("sc:close").build()));
+        return InlineKeyboardMarkup.builder().keyboard(rows).build();
     }
 
     private static InlineKeyboardMarkup dayKeyboard() {

@@ -20,6 +20,7 @@ import java.util.List;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -60,7 +61,7 @@ class InterviewsCommandHandlerTest {
 
         handler.handle(update, telegramClient);
 
-        verify(telegramClient).execute(any(SendMessage.class));
+        verify(telegramClient, never()).execute(any(SendMessage.class));
     }
 }
 

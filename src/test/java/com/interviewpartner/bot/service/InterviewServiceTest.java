@@ -38,7 +38,7 @@ class InterviewServiceTest {
     void createInterview_shouldThrowIfUserNotFound() {
         assertThatThrownBy(() -> interviewService.createInterview(
                 1L, 2L, Language.RUSSIAN, InterviewFormat.TECHNICAL,
-                LocalDateTime.of(2026, 3, 18, 12, 0), 60
+                LocalDateTime.of(2026, 3, 18, 12, 0), 60, true
         )).isInstanceOf(UserNotFoundException.class);
     }
 
@@ -53,7 +53,8 @@ class InterviewServiceTest {
                 Language.RUSSIAN,
                 InterviewFormat.TECHNICAL,
                 LocalDateTime.of(2026, 3, 18, 12, 0),
-                60
+                60,
+                true
         );
 
         assertThat(created.getId()).isNotNull();
@@ -72,7 +73,8 @@ class InterviewServiceTest {
                 Language.RUSSIAN,
                 InterviewFormat.TECHNICAL,
                 LocalDateTime.of(2026, 3, 18, 12, 0),
-                60
+                60,
+                true
         );
 
         assertThatThrownBy(() -> interviewService.createInterview(
@@ -81,7 +83,8 @@ class InterviewServiceTest {
                 Language.RUSSIAN,
                 InterviewFormat.BEHAVIORAL,
                 LocalDateTime.of(2026, 3, 18, 12, 30),
-                30
+                30,
+                true
         )).isInstanceOf(InterviewConflictException.class);
     }
 
@@ -96,7 +99,8 @@ class InterviewServiceTest {
                 Language.ENGLISH,
                 InterviewFormat.BEHAVIORAL,
                 LocalDateTime.of(2026, 3, 18, 14, 0),
-                30
+                30,
+                true
         );
 
         var cancelled = interviewService.cancelInterview(interview.getId());
@@ -114,7 +118,8 @@ class InterviewServiceTest {
                 Language.ENGLISH,
                 InterviewFormat.TECHNICAL,
                 LocalDateTime.of(2026, 3, 18, 16, 0),
-                30
+                30,
+                true
         );
 
         var completed = interviewService.completeInterview(interview.getId());

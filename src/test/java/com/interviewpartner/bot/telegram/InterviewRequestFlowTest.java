@@ -80,7 +80,7 @@ class InterviewRequestFlowTest {
         Update update = mockCallbackUpdate(222L, "ir:accept:10");
         handler.handle(update, telegramClient);
 
-        verify(interviewService).createInterview(eq(1L), eq(2L), eq(Language.RUSSIAN), eq(InterviewFormat.TECHNICAL), any(), eq(60));
+        verify(interviewService).createInterview(eq(1L), eq(2L), eq(Language.RUSSIAN), eq(InterviewFormat.TECHNICAL), any(), eq(60), eq(true));
         verify(telegramClient, org.mockito.Mockito.atLeastOnce()).execute(any(SendMessage.class));
     }
 

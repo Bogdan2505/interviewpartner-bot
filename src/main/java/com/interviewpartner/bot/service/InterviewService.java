@@ -17,7 +17,8 @@ public interface InterviewService {
             Language language,
             InterviewFormat format,
             LocalDateTime dateTime,
-            int durationMinutes
+            int durationMinutes,
+            boolean initiatorIsCandidate
     );
 
     List<User> findAvailablePartners(Long userId, Language language, LocalDateTime dateTime);

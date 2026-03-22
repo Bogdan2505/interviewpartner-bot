@@ -22,7 +22,6 @@ import java.util.List;
 @RequiredArgsConstructor
 public class InterviewsCommandHandler implements BotCommandHandler {
 
-    private static final String CMD = "/interviews";
     private static final DateTimeFormatter DT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     private final UserService userService;
@@ -30,15 +29,14 @@ public class InterviewsCommandHandler implements BotCommandHandler {
 
     @Override
     public boolean canHandle(Update update) {
-        if (!update.hasMessage() || !update.getMessage().hasText()) {
-            return false;
-        }
-        String text = update.getMessage().getText().strip();
-        return text.startsWith(CMD) || text.equalsIgnoreCase(ChatMenuKeyboardBuilder.BTN_MY_INTERVIEWS);
+        // Функционал "Мои собеседования" убран по ТЗ: не показываем в UI и не обрабатываем команду.
+        return false;
     }
 
     @Override
     public void handle(Update update, TelegramClient telegramClient) {
+        // Должно быть отключено: команда и кнопка "Мои собеседования" убраны по ТЗ.
+        if (!canHandle(update)) return;
         var message = update.getMessage();
         Long chatId = message.getChatId();
         var from = message.getFrom();

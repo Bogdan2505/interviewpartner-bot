@@ -16,6 +16,7 @@ public class ConversationStateService {
     private final Map<Long, CreateInterviewState> createInterviewStates = new ConcurrentHashMap<>();
     private final Map<Long, FindPartnerState> findPartnerStates = new ConcurrentHashMap<>();
     private final Map<Long, ScheduleState> scheduleStates = new ConcurrentHashMap<>();
+    private final Map<Long, InterviewCalendarState> interviewCalendarStates = new ConcurrentHashMap<>();
 
     /** Начать создание: как кандидат (true) или как интервьюер (false). */
     public CreateInterviewState startCreateInterview(Long chatId, Long userId, boolean asCandidate) {
@@ -71,6 +72,25 @@ public class ConversationStateService {
 
     public void clearSchedule(Long chatId) {
         scheduleStates.remove(chatId);
+    }
+
+    public InterviewCalendarState startInterviewCalendar(Long chatId, Long userId) {
+        var state = new InterviewCalendarState();
+        state.userId = userId;
+        var now = java.time.LocalDate.now();
+        state.calendarYear = now.getYear();
+        state.calendarMonth = now.getMonthValue();
+        state.selectedDate = null;
+        interviewCalendarStates.put(chatId, state);
+        return state;
+    }
+
+    public Optional<InterviewCalendarState> getInterviewCalendar(Long chatId) {
+        return Optional.ofNullable(interviewCalendarStates.get(chatId));
+    }
+
+    public void clearInterviewCalendar(Long chatId) {
+        interviewCalendarStates.remove(chatId);
     }
 }
 

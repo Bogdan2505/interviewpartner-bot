@@ -59,6 +59,9 @@ public class Interview {
     @Column(name = "status", nullable = false)
     private InterviewStatus status;
 
+    @Column(name = "initiator_is_candidate", nullable = false)
+    private boolean initiatorIsCandidate = true;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

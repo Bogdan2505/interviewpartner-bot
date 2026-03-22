@@ -36,7 +36,8 @@ public class InterviewServiceImpl implements InterviewService {
             Language language,
             InterviewFormat format,
             LocalDateTime dateTime,
-            int durationMinutes
+            int durationMinutes,
+            boolean initiatorIsCandidate
     ) {
         var candidate = userRepository.findById(candidateId)
                 .orElseThrow(() -> new UserNotFoundException("User with id=" + candidateId + " not found"));
@@ -58,6 +59,7 @@ public class InterviewServiceImpl implements InterviewService {
                 .dateTime(dateTime)
                 .duration(durationMinutes)
                 .status(InterviewStatus.SCHEDULED)
+                .initiatorIsCandidate(initiatorIsCandidate)
                 .build());
     }
 

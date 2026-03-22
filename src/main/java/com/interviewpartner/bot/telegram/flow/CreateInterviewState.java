@@ -4,6 +4,7 @@ import com.interviewpartner.bot.model.InterviewFormat;
 import com.interviewpartner.bot.model.Language;
 import com.interviewpartner.bot.service.dto.AvailableSlotDto;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -21,10 +22,16 @@ public class CreateInterviewState {
     public Integer durationMinutes;
     /** Список доступных слотов для выбора (шаг VIEW_SLOTS). */
     public List<AvailableSlotDto> availableSlots;
+    /** Выбранная дата при просмотре слотов по календарю. */
+    public LocalDate selectedSlotDate;
+    /** Календарь слотов: месяц для отображения. */
+    public int slotCalendarYear;
+    public int slotCalendarMonth;
 
     public enum Step {
         LANGUAGE,
         FORMAT,
+        VIEW_SLOT_DATES,
         VIEW_SLOTS,
         DATE_TIME,
         DURATION,

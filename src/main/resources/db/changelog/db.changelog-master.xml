@@ -13,4 +13,12 @@
                 stripComments="true"/>
     </changeSet>
 
+    <changeSet id="002-interview-initiator-role" author="interviewpartner">
+        <sqlFile
+                path="sql/002_interview_initiator_role.sql"
+                relativeToChangelogFile="true"
+                splitStatements="true"
+                stripComments="true"/>
+    </changeSet>
+
 </databaseChangeLog>

@@ -19,6 +19,7 @@ import org.telegram.telegrambots.meta.generics.TelegramClient;
 import java.util.Collections;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.mock;
@@ -44,6 +45,8 @@ class CreateInterviewFlowTest {
         when(userService.registerUser(anyLong(), any())).thenReturn(mockUser);
         InterviewService interviewService = mock(InterviewService.class);
         when(interviewService.findAvailablePartners(anyLong(), any(), any())).thenReturn(Collections.emptyList());
+        when(interviewService.getAvailableSlotsAsCandidate(anyLong(), any(), anyInt())).thenReturn(Collections.emptyList());
+        when(interviewService.getAvailableSlotsAsInterviewer(anyLong(), any(), anyInt())).thenReturn(Collections.emptyList());
         commandHandler = new CreateInterviewCommandHandler(stateService, userService);
         callbackQueryHandler = new CallbackQueryHandler(
                 stateService,
@@ -72,13 +75,13 @@ class CreateInterviewFlowTest {
         verify(telegramClient).execute(any(SendMessage.class));
         reset(telegramClient);
 
-        Update dt = mockMessageUpdate(1L, "2026-03-25 19:00");
-        messageHandler.handle(dt, telegramClient);
+        Update day = mockCallbackUpdate(1L, "ci:slotdate:2026-03-25");
+        callbackQueryHandler.handle(day, telegramClient);
         verify(telegramClient).execute(any(SendMessage.class));
         reset(telegramClient);
 
-        Update dur = mockMessageUpdate(1L, "60");
-        messageHandler.handle(dur, telegramClient);
+        Update time = mockCallbackUpdate(1L, "ci:time:2026-03-25:19");
+        callbackQueryHandler.handle(time, telegramClient);
         verify(telegramClient).execute(any(SendMessage.class));
         reset(telegramClient);
 
