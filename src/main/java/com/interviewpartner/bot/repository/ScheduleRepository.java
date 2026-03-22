@@ -1,5 +1,6 @@
 package com.interviewpartner.bot.repository;
 
+import com.interviewpartner.bot.model.Language;
 import com.interviewpartner.bot.model.Schedule;
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -10,5 +11,7 @@ public interface ScheduleRepository extends JpaRepository<Schedule, Long> {
     List<Schedule> findByUserId(Long userId);
 
     List<Schedule> findByUserIdAndDayOfWeek(Long userId, DayOfWeek dayOfWeek);
+
+    List<Schedule> findByLanguageAndUserIdNot(Language language, Long excludeUserId);
 }
 

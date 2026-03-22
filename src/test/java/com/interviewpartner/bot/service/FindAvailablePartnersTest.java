@@ -7,6 +7,7 @@ import com.interviewpartner.bot.model.Level;
 import com.interviewpartner.bot.model.User;
 import com.interviewpartner.bot.repository.InterviewRepository;
 import com.interviewpartner.bot.repository.UserRepository;
+import com.interviewpartner.bot.service.CandidateSlotServiceImpl;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
@@ -21,7 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @DataJpaTest
 @ActiveProfiles("test")
-@Import({InterviewServiceImpl.class, ScheduleServiceImpl.class})
+@Import({InterviewServiceImpl.class, ScheduleServiceImpl.class, CandidateSlotServiceImpl.class})
 class FindAvailablePartnersTest {
 
     @Autowired
@@ -55,9 +56,9 @@ class FindAvailablePartnersTest {
                 .build());
 
         LocalDateTime when = LocalDateTime.of(2026, 3, 23, 10, 0); // MONDAY
-        scheduleService.addAvailability(ok.getId(), DayOfWeek.MONDAY, LocalTime.of(9, 0), LocalTime.of(12, 0));
-        scheduleService.addAvailability(busy.getId(), DayOfWeek.MONDAY, LocalTime.of(9, 0), LocalTime.of(12, 0));
-        scheduleService.addAvailability(wrongLang.getId(), DayOfWeek.MONDAY, LocalTime.of(9, 0), LocalTime.of(12, 0));
+        scheduleService.addAvailability(ok.getId(), Language.RUSSIAN, DayOfWeek.MONDAY, LocalTime.of(9, 0), LocalTime.of(12, 0));
+        scheduleService.addAvailability(busy.getId(), Language.RUSSIAN, DayOfWeek.MONDAY, LocalTime.of(9, 0), LocalTime.of(12, 0));
+        scheduleService.addAvailability(wrongLang.getId(), Language.ENGLISH, DayOfWeek.MONDAY, LocalTime.of(9, 0), LocalTime.of(12, 0));
 
         interviewRepository.saveAndFlush(com.interviewpartner.bot.model.Interview.builder()
                 .candidate(busy)

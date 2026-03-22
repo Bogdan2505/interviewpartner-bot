@@ -66,13 +66,17 @@ public class ScheduleMessageHandler implements BotCommandHandler {
             send(chatId, "Неверное время. Введите HH:mm-HH:mm (например 10:00-12:00)", telegramClient);
             return;
         }
+        if (state.language == null) {
+            send(chatId, "Сначала укажите направление.", telegramClient);
+            return;
+        }
         try {
             if (multiDay) {
                 int added = 0;
                 DayOfWeek failedDay = null;
                 for (DayOfWeek d : state.selectedDaysForSlot) {
                     try {
-                        scheduleService.addAvailability(state.userId, d, start, end);
+                        scheduleService.addAvailability(state.userId, state.language, d, start, end);
                         added++;
                     } catch (ScheduleOverlapException e) {
                         failedDay = d;
@@ -86,7 +90,7 @@ public class ScheduleMessageHandler implements BotCommandHandler {
                     send(chatId, "Слоты добавлены: " + start + "–" + end + " для " + added + " дн.", telegramClient);
                 }
             } else {
-                scheduleService.addAvailability(state.userId, state.dayOfWeek, start, end);
+                scheduleService.addAvailability(state.userId, state.language, state.dayOfWeek, start, end);
                 stateService.clearSchedule(chatId);
                 send(chatId, "Слот добавлен: " + state.dayOfWeek + " " + start + "-" + end, telegramClient);
             }

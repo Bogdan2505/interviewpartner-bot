@@ -2,6 +2,7 @@ package com.interviewpartner.bot.repository;
 
 import com.interviewpartner.bot.model.Interview;
 import com.interviewpartner.bot.model.InterviewStatus;
+import com.interviewpartner.bot.model.Language;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -34,6 +35,35 @@ public interface InterviewRepository extends JpaRepository<Interview, Long> {
             @Param("endTime") LocalDateTime endTime
     );
 
+    /**
+     * Ищет solo-слоты (candidate_id = interviewer_id) с нужным языком, созданным не текущим пользователем.
+     * initiatorIsCandidate=false → создатель-интервьюер, ищем кандидата;
+     * initiatorIsCandidate=true  → создатель-кандидат, ищем интервьюера.
+     */
+    /**
+     * Ищет solo-слоты других пользователей (candidate_id = interviewer_id,
+     * и это НЕ текущий пользователь).
+     * initiatorIsCandidate=false → создатель-интервьюер → кандидат ищет партнёра;
+     * initiatorIsCandidate=true  → создатель-кандидат → интервьюер ищет партнёра.
+     */
+    @Query("""
+            select i from Interview i
+            where i.candidate.id = i.interviewer.id
+              and i.language = :language
+              and i.candidate.id <> :excludeUserId
+              and i.interviewer.id <> :excludeUserId
+              and i.initiatorIsCandidate = :initiatorIsCandidate
+              and i.status = com.interviewpartner.bot.model.InterviewStatus.SCHEDULED
+              and i.dateTime > :now
+            order by i.dateTime asc
+            """)
+    List<Interview> findOpenSoloSlots(
+            @Param("language") Language language,
+            @Param("excludeUserId") Long excludeUserId,
+            @Param("initiatorIsCandidate") boolean initiatorIsCandidate,
+            @Param("now") LocalDateTime now
+    );
+
     default List<Interview> findConflictingInterviews(Long userId, LocalDateTime requestedStart, int requestedDurationMinutes) {
         var requestedEnd = requestedStart.plusMinutes(requestedDurationMinutes);
         return findUserInterviewsStartingBefore(userId, requestedEnd).stream()
@@ -41,6 +71,24 @@ public interface InterviewRepository extends JpaRepository<Interview, Long> {
                     var interviewEnd = i.getDateTime().plusMinutes(i.getDuration());
                     return interviewEnd.isAfter(requestedStart);
                 })
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Проверяет конфликты только с парными интервью (candidate ≠ interviewer).
+     * Solo-слоты (ожидающие партнёра) не учитываются — они не должны блокировать
+     * отображение слотов других пользователей в поиске партнёра.
+     */
+    default List<Interview> findConflictingPairedInterviews(Long userId, LocalDateTime requestedStart, int requestedDurationMinutes) {
+        var requestedEnd = requestedStart.plusMinutes(requestedDurationMinutes);
+        return findUserInterviewsStartingBefore(userId, requestedEnd).stream()
+                .filter(i -> {
+                    var interviewEnd = i.getDateTime().plusMinutes(i.getDuration());
+                    return interviewEnd.isAfter(requestedStart);
+                })
+                .filter(i -> i.getCandidate() == null || i.getInterviewer() == null
+                        || i.getCandidate().getId() == null
+                        || !i.getCandidate().getId().equals(i.getInterviewer().getId()))
                 .collect(Collectors.toList());
     }
 }

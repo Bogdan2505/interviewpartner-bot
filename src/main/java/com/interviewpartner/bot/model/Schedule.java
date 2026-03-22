@@ -38,6 +38,10 @@ public class Schedule {
     private User user;
 
     @Enumerated(EnumType.STRING)
+    @Column(name = "language", nullable = false)
+    private Language language;
+
+    @Enumerated(EnumType.STRING)
     @Column(name = "day_of_week", nullable = false)
     private DayOfWeek dayOfWeek;
 

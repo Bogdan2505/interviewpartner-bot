@@ -55,7 +55,8 @@ class InterviewRequestFlowTest {
         when(partner.getTelegramId()).thenReturn(222L);
         when(userService.getUserById(2L)).thenReturn(partner);
 
-        handler = new CallbackQueryHandler(stateService, interviewService, scheduleService, userService, interviewRequestService);
+        handler = new CallbackQueryHandler(stateService, interviewService, scheduleService,
+                mock(com.interviewpartner.bot.service.CandidateSlotService.class), userService, interviewRequestService);
     }
 
     @Test

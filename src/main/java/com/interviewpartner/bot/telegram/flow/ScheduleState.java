@@ -1,11 +1,14 @@
 package com.interviewpartner.bot.telegram.flow;
 
+import com.interviewpartner.bot.model.Language;
+
 import java.time.DayOfWeek;
 import java.util.HashSet;
 import java.util.Set;
 
 public class ScheduleState {
     public Long userId;
+    public Language language;
     public Step step = Step.IDLE;
     public DayOfWeek dayOfWeek;
     /** Для календаря: год и месяц (1–12). */

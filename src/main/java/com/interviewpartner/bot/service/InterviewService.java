@@ -23,11 +23,23 @@ public interface InterviewService {
 
     List<User> findAvailablePartners(Long userId, Language language, LocalDateTime dateTime);
 
-    /** Слоты, когда можно записаться как кандидат (есть свободные интервьюеры). */
+    /** Слоты, когда есть свободные интервьюеры (по таблице schedules). */
     List<AvailableSlotDto> getAvailableSlotsAsCandidate(Long candidateUserId, Language language, int daysAhead);
 
-    /** Слоты, когда можно провести собеседование как интервьюер (есть свободные кандидаты). */
+    /** Слоты, когда есть свободные кандидаты (по таблице candidate_slots). */
     List<AvailableSlotDto> getAvailableSlotsAsInterviewer(Long interviewerUserId, Language language, int daysAhead);
+
+    /** Пытается автоматически создать собеседование для интервьюера с первым подходящим кандидатом. */
+    List<Interview> tryAutoMatchForInterviewer(Long interviewerUserId, Language language);
+
+    /** Пытается автоматически создать собеседование для кандидата с первым подходящим интервьюером. */
+    List<Interview> tryAutoMatchForCandidate(Long candidateUserId, Language language);
+
+    /**
+     * Присоединяет пользователя к существующему solo-слоту:
+     * если asCandidate=true — устанавливает candidateId, иначе — interviewerId.
+     */
+    Interview joinInterview(Long interviewId, Long userId, boolean asCandidate);
 
     List<Interview> getUserInterviews(Long userId, InterviewStatus status);
 

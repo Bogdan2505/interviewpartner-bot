@@ -32,6 +32,7 @@ class ScheduleRepositoryTest {
 
         scheduleRepository.saveAndFlush(Schedule.builder()
                 .user(user)
+                .language(Language.JAVA)
                 .dayOfWeek(DayOfWeek.MONDAY)
                 .startTime(LocalTime.of(10, 0))
                 .endTime(LocalTime.of(12, 0))

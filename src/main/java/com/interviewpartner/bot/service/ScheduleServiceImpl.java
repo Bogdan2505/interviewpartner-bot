@@ -2,6 +2,7 @@ package com.interviewpartner.bot.service;
 
 import com.interviewpartner.bot.exception.ScheduleOverlapException;
 import com.interviewpartner.bot.exception.UserNotFoundException;
+import com.interviewpartner.bot.model.Language;
 import com.interviewpartner.bot.model.Schedule;
 import com.interviewpartner.bot.repository.ScheduleRepository;
 import com.interviewpartner.bot.repository.UserRepository;
@@ -26,7 +27,7 @@ public class ScheduleServiceImpl implements ScheduleService {
     private final UserRepository userRepository;
 
     @Override
-    public Schedule addAvailability(Long userId, DayOfWeek dayOfWeek, LocalTime startTime, LocalTime endTime) {
+    public Schedule addAvailability(Long userId, Language language, DayOfWeek dayOfWeek, LocalTime startTime, LocalTime endTime) {
         if (!userRepository.existsById(userId)) {
             throw new UserNotFoundException("User with id=" + userId + " not found");
         }
@@ -46,6 +47,7 @@ public class ScheduleServiceImpl implements ScheduleService {
 
         return scheduleRepository.save(Schedule.builder()
                 .user(user)
+                .language(language)
                 .dayOfWeek(dayOfWeek)
                 .startTime(startTime)
                 .endTime(endTime)

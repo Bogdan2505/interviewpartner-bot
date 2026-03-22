@@ -1,5 +1,6 @@
 package com.interviewpartner.bot.service;
 
+import com.interviewpartner.bot.model.Language;
 import com.interviewpartner.bot.model.Schedule;
 
 import java.time.DayOfWeek;
@@ -9,7 +10,7 @@ import java.time.LocalTime;
 import java.util.List;
 
 public interface ScheduleService {
-    Schedule addAvailability(Long userId, DayOfWeek dayOfWeek, LocalTime startTime, LocalTime endTime);
+    Schedule addAvailability(Long userId, Language language, DayOfWeek dayOfWeek, LocalTime startTime, LocalTime endTime);
 
     void removeAvailability(Long scheduleId);
 

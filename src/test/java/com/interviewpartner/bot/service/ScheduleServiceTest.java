@@ -39,6 +39,7 @@ class ScheduleServiceTest {
 
         var slot = scheduleService.addAvailability(
                 user.getId(),
+                Language.JAVA,
                 DayOfWeek.MONDAY,
                 LocalTime.of(10, 0),
                 LocalTime.of(12, 0)
@@ -54,6 +55,7 @@ class ScheduleServiceTest {
 
         scheduleService.addAvailability(
                 user.getId(),
+                Language.JAVA,
                 DayOfWeek.MONDAY,
                 LocalTime.of(10, 0),
                 LocalTime.of(12, 0)
@@ -61,6 +63,7 @@ class ScheduleServiceTest {
 
         assertThatThrownBy(() -> scheduleService.addAvailability(
                 user.getId(),
+                Language.JAVA,
                 DayOfWeek.MONDAY,
                 LocalTime.of(11, 0),
                 LocalTime.of(13, 0)
@@ -73,6 +76,7 @@ class ScheduleServiceTest {
 
         scheduleService.addAvailability(
                 user.getId(),
+                Language.JAVA,
                 DayOfWeek.TUESDAY,
                 LocalTime.of(10, 0),
                 LocalTime.of(12, 0)
@@ -88,6 +92,7 @@ class ScheduleServiceTest {
 
         var slot = scheduleService.addAvailability(
                 user.getId(),
+                Language.JAVA,
                 DayOfWeek.FRIDAY,
                 LocalTime.of(10, 0),
                 LocalTime.of(12, 0)

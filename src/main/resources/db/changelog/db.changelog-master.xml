@@ -21,4 +21,12 @@
                 stripComments="true"/>
     </changeSet>
 
+    <changeSet id="003-two-slot-tables" author="interviewpartner">
+        <sqlFile
+                path="sql/003_two_slot_tables.sql"
+                relativeToChangelogFile="true"
+                splitStatements="true"
+                stripComments="true"/>
+    </changeSet>
+
 </databaseChangeLog>

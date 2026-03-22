@@ -16,24 +16,22 @@ import org.telegram.telegrambots.meta.generics.TelegramClient;
 
 import java.util.List;
 
+/**
+ * "Провести собеседование" — запускает ci: поток как интервьюер (выбор языка → календарь → слоты).
+ */
 @Order(21)
 @Component
 @RequiredArgsConstructor
 public class FindPartnerCommandHandler implements BotCommandHandler {
-
-    private static final String CMD = "/find_partner";
-    private static final String MESSAGE_RU = "Поиск партнёра: выберите направление.";
 
     private final ConversationStateService stateService;
     private final UserService userService;
 
     @Override
     public boolean canHandle(Update update) {
-        if (!update.hasMessage() || !update.getMessage().hasText()) {
-            return false;
-        }
+        if (!update.hasMessage() || !update.getMessage().hasText()) return false;
         String text = update.getMessage().getText().strip();
-        return text.startsWith(CMD) || text.equalsIgnoreCase(ChatMenuKeyboardBuilder.BTN_FIND_PARTNER);
+        return text.equalsIgnoreCase(ChatMenuKeyboardBuilder.BTN_FIND_PARTNER);
     }
 
     @Override
@@ -61,24 +59,22 @@ public class FindPartnerCommandHandler implements BotCommandHandler {
         }
     }
 
-    /** Общий flow с созданием собеседования — те же callback ci:lang:, ci:cancel. */
     private static InlineKeyboardMarkup languageKeyboard() {
-        var java = InlineKeyboardButton.builder().text("Java").callbackData("ci:lang:JAVA").build();
-        var python = InlineKeyboardButton.builder().text("Python").callbackData("ci:lang:PYTHON").build();
-        var js = InlineKeyboardButton.builder().text("JavaScript").callbackData("ci:lang:JAVASCRIPT").build();
-        var go = InlineKeyboardButton.builder().text("Go").callbackData("ci:lang:GO").build();
-        var qa = InlineKeyboardButton.builder().text("QA").callbackData("ci:lang:QA").build();
-        var data = InlineKeyboardButton.builder().text("Data Analytics").callbackData("ci:lang:DATA_ANALYTICS").build();
-        var ba = InlineKeyboardButton.builder().text("Business Analysis").callbackData("ci:lang:BUSINESS_ANALYSIS").build();
-        var sa = InlineKeyboardButton.builder().text("System Analysis").callbackData("ci:lang:SYSTEM_ANALYSIS").build();
-        var cancel = InlineKeyboardButton.builder().text("Отмена").callbackData("ci:cancel").build();
-        List<InlineKeyboardRow> rows = List.of(
-                new InlineKeyboardRow(java, python),
-                new InlineKeyboardRow(js, go),
-                new InlineKeyboardRow(qa, data),
-                new InlineKeyboardRow(ba, sa),
-                new InlineKeyboardRow(cancel)
-        );
-        return InlineKeyboardMarkup.builder().keyboard(rows).build();
+        return InlineKeyboardMarkup.builder().keyboard(List.of(
+                new InlineKeyboardRow(
+                        InlineKeyboardButton.builder().text("Java").callbackData("ci:lang:JAVA").build(),
+                        InlineKeyboardButton.builder().text("Python").callbackData("ci:lang:PYTHON").build()),
+                new InlineKeyboardRow(
+                        InlineKeyboardButton.builder().text("JavaScript").callbackData("ci:lang:JAVASCRIPT").build(),
+                        InlineKeyboardButton.builder().text("Go").callbackData("ci:lang:GO").build()),
+                new InlineKeyboardRow(
+                        InlineKeyboardButton.builder().text("QA").callbackData("ci:lang:QA").build(),
+                        InlineKeyboardButton.builder().text("Data Analytics").callbackData("ci:lang:DATA_ANALYTICS").build()),
+                new InlineKeyboardRow(
+                        InlineKeyboardButton.builder().text("Business Analysis").callbackData("ci:lang:BUSINESS_ANALYSIS").build(),
+                        InlineKeyboardButton.builder().text("System Analysis").callbackData("ci:lang:SYSTEM_ANALYSIS").build()),
+                new InlineKeyboardRow(
+                        InlineKeyboardButton.builder().text("Отмена").callbackData("ci:cancel").build())
+        )).build();
     }
 }
