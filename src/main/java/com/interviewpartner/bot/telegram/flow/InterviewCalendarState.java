@@ -10,6 +10,15 @@ import java.time.LocalDate;
  */
 @Getter
 public class InterviewCalendarState {
+
+    /** Разделы расписания. */
+    public enum ScheduleFilter {
+        /** Заявки — solo-слоты (кандидат = интервьюер), ожидающие партнёра. */
+        PENDING,
+        /** Согласованные — парные интервью, оба участника подтверждены. */
+        CONFIRMED
+    }
+
     public Long userId;
 
     /** Текущий год/месяц календаря (1-12). */
@@ -18,5 +27,8 @@ public class InterviewCalendarState {
 
     /** Если пользователь открыл конкретный день. */
     public LocalDate selectedDate;
+
+    /** Активный раздел расписания (null — ещё не выбран). */
+    public ScheduleFilter filter;
 }
 
