@@ -2,6 +2,7 @@ package com.interviewpartner.bot.telegram.flow;
 
 import com.interviewpartner.bot.model.InterviewFormat;
 import com.interviewpartner.bot.model.Language;
+import com.interviewpartner.bot.model.Level;
 import com.interviewpartner.bot.service.dto.AvailableSlotDto;
 
 import java.time.LocalDate;
@@ -17,6 +18,8 @@ public class CreateInterviewState {
     /** Id интервьюера (когда asCandidate: выбранный партнёр; иначе — это я). */
     public Long interviewerUserId;
     public Language language;
+    /** Уровень для данного собеседования; null = «не важно». */
+    public Level level;
     public InterviewFormat format;
     public LocalDateTime dateTime;
     public Integer durationMinutes;
@@ -32,6 +35,7 @@ public class CreateInterviewState {
 
     public enum Step {
         LANGUAGE,
+        LEVEL,
         FORMAT,
         VIEW_SLOT_DATES,
         VIEW_SLOTS,

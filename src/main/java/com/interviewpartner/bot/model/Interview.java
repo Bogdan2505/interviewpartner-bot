@@ -46,6 +46,10 @@ public class Interview {
     private Language language;
 
     @Enumerated(EnumType.STRING)
+    @Column(name = "level")
+    private Level level;
+
+    @Enumerated(EnumType.STRING)
     @Column(name = "format", nullable = false)
     private InterviewFormat format;
 

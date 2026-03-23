@@ -8,6 +8,7 @@ import com.interviewpartner.bot.model.Interview;
 import com.interviewpartner.bot.model.InterviewFormat;
 import com.interviewpartner.bot.model.InterviewStatus;
 import com.interviewpartner.bot.model.Language;
+import com.interviewpartner.bot.model.Level;
 import com.interviewpartner.bot.model.Schedule;
 import com.interviewpartner.bot.model.User;
 import com.interviewpartner.bot.service.CandidateSlotService;
@@ -139,9 +140,23 @@ public class CallbackQueryHandler implements BotCommandHandler {
             state.format = InterviewFormat.TECHNICAL;
             Long myUserId = state.asCandidate ? state.candidateUserId : state.interviewerUserId;
             if (myUserId != null) userService.updateUserLanguage(myUserId, state.language);
+            state.step = CreateInterviewState.Step.LEVEL;
+            telegramClient.execute(SendMessage.builder()
+                    .chatId(chatId)
+                    .text("Выберите ваш грейд:")
+                    .replyMarkup(createInterviewLevelKeyboard())
+                    .build());
+            return;
+        }
+
+        if (data.startsWith("ci:level:")) {
+            String levelStr = data.substring("ci:level:".length());
+            state.level = "ANY".equals(levelStr) ? null : Level.valueOf(levelStr);
+            Long myUserId = state.asCandidate ? state.candidateUserId : state.interviewerUserId;
+            if (myUserId != null && state.level != null) userService.updateUserLevel(myUserId, state.level);
             List<AvailableSlotDto> slots = state.asCandidate
-                    ? interviewService.getAvailableSlotsAsCandidate(state.candidateUserId, state.language, 14)
-                    : interviewService.getAvailableSlotsAsInterviewer(state.interviewerUserId, state.language, 14);
+                    ? interviewService.getAvailableSlotsAsCandidate(state.candidateUserId, state.language, state.level, 14)
+                    : interviewService.getAvailableSlotsAsInterviewer(state.interviewerUserId, state.language, state.level, 14);
             if (slots == null) slots = List.of();
             state.availableSlots = slots;
             state.step = CreateInterviewState.Step.VIEW_SLOT_DATES;
@@ -232,10 +247,12 @@ public class CallbackQueryHandler implements BotCommandHandler {
                     state.candidateUserId = matchedSlot.partnerUserId();
                 }
                 state.step = CreateInterviewState.Step.CONFIRM;
-                String partnerLabel = matchedSlot.partnerLabel();
+                String partnerLabel = matchedSlot.partnerLabel()
+                        + (matchedSlot.partnerLevel() != null ? " [" + levelLabel(matchedSlot.partnerLevel()) + "]" : "");
                 boolean joining = state.joinInterviewId != null;
                 String summary = (joining ? "Записаться на собеседование?\n" : "Подтвердить создание?\n")
                         + "Язык: " + state.language + "\n"
+                        + (state.level != null ? "Грейд: " + levelLabel(state.level) + "\n" : "")
                         + "Дата/время: " + DT_FORMAT.format(state.dateTime) + "\n"
                         + "Длительность: " + state.durationMinutes + " мин\n"
                         + "Партнёр: " + partnerLabel;
@@ -246,7 +263,6 @@ public class CallbackQueryHandler implements BotCommandHandler {
                         .build());
             } else {
                 // Нет готового слота — предлагаем создать без партнёра
-                state.step = CreateInterviewState.Step.PARTNER;
                 if (state.asCandidate) {
                     state.interviewerUserId = state.candidateUserId;
                 } else {
@@ -254,7 +270,8 @@ public class CallbackQueryHandler implements BotCommandHandler {
                 }
                 state.step = CreateInterviewState.Step.CONFIRM;
                 String summary = "Партнёр пока не найден. Создать слот на "
-                        + DT_FORMAT.format(state.dateTime) + " (" + state.language + ")?\n"
+                        + DT_FORMAT.format(state.dateTime) + " (" + state.language + ")"
+                        + (state.level != null ? " [" + levelLabel(state.level) + "]" : "") + "?\n"
                         + "Партнёр будет подобран позже.";
                 telegramClient.execute(SendMessage.builder()
                         .chatId(chatId)
@@ -306,8 +323,11 @@ public class CallbackQueryHandler implements BotCommandHandler {
                 state.candidateUserId = slot.partnerUserId();
             }
             state.step = CreateInterviewState.Step.CONFIRM;
-            String summary = "Подтвердить создание?\nЯзык: " + state.language + "\nФормат: " + state.format
-                    + "\nДата/время: " + DT_FORMAT.format(state.dateTime) + "\nДлительность: " + state.durationMinutes + " мин.\nПартнёр: " + slot.partnerLabel();
+            String slotPartnerLabel = slot.partnerLabel()
+                    + (slot.partnerLevel() != null ? " [" + levelLabel(slot.partnerLevel()) + "]" : "");
+            String summary = "Подтвердить создание?\nЯзык: " + state.language
+                    + (state.level != null ? "\nГрейд: " + levelLabel(state.level) : "")
+                    + "\nДата/время: " + DT_FORMAT.format(state.dateTime) + "\nДлительность: " + state.durationMinutes + " мин.\nПартнёр: " + slotPartnerLabel;
             telegramClient.execute(SendMessage.builder()
                     .chatId(chatId)
                     .text(summary)
@@ -369,12 +389,15 @@ public class CallbackQueryHandler implements BotCommandHandler {
                         String joinerLabel = joiner.getUsername() != null ? "@" + joiner.getUsername() : "пользователь #" + myId;
                         String dtStr = DT_FORMAT.format(state.dateTime);
 
+                        String levelInfo = state.level != null ? "\nГрейд: " + levelLabel(state.level) : "";
+
                         // Уведомление присоединившемуся
                         telegramClient.execute(SendMessage.builder()
                                 .chatId(chatId)
                                 .text("Вы записаны на собеседование!\n"
                                         + "Дата/время: " + dtStr + "\n"
-                                        + "Язык: " + state.language + "\n"
+                                        + "Язык: " + state.language
+                                        + levelInfo + "\n"
                                         + "Партнёр: " + creatorLabel + "\n"
                                         + "Ваша роль: " + joinerRole)
                                 .build());
@@ -383,7 +406,8 @@ public class CallbackQueryHandler implements BotCommandHandler {
                         sendNotification(telegramClient, creator.getTelegramId(),
                                 "Найден партнёр для вашего слота!\n"
                                         + "Дата/время: " + dtStr + "\n"
-                                        + "Язык: " + state.language + "\n"
+                                        + "Язык: " + state.language
+                                        + levelInfo + "\n"
                                         + "Партнёр: " + joinerLabel + "\n"
                                         + "Ваша роль: " + creatorRole);
                     } else {
@@ -391,6 +415,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
                                 state.candidateUserId,
                                 state.interviewerUserId,
                                 state.language,
+                                state.level,
                                 state.format,
                                 state.dateTime,
                                 state.durationMinutes,
@@ -683,6 +708,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
                         req.getCandidate().getId(),
                         req.getInterviewer().getId(),
                         req.getLanguage(),
+                        null,
                         req.getFormat(),
                         req.getDateTime(),
                         req.getDurationMinutes(),
@@ -907,9 +933,11 @@ public class CallbackQueryHandler implements BotCommandHandler {
                 for (Interview booked : bookedList) {
                     String time = booked.getDateTime().format(timeFmt);
                     if (sb.length() > 0) sb.append("\n\n");
+                    String levelSuffix = booked.getLevel() != null ? " [" + levelLabel(booked.getLevel()) + "]" : "";
                     if (state.filter == InterviewCalendarState.ScheduleFilter.PENDING) {
                         String waitFor = booked.isInitiatorIsCandidate() ? "жду интервьюера" : "жду кандидата";
                         sb.append(waitFor).append(", ").append(booked.getLanguage())
+                                .append(levelSuffix)
                                 .append(", ").append(booked.getDuration()).append(" мин в ").append(time);
                     } else {
                         boolean isCandidate = resolveUserRole(booked, state.userId) == CalendarRoleType.CANDIDATE;
@@ -920,6 +948,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
                                 : (partner != null ? "пользователь #" + partner.getId() : "—");
                         sb.append(youAction).append(", партнёр: ").append(partnerLabel)
                                 .append("\n").append(booked.getLanguage())
+                                .append(levelSuffix)
                                 .append(", ").append(booked.getFormat())
                                 .append(", ").append(booked.getDuration()).append(" мин в ").append(time);
                     }
@@ -1246,6 +1275,26 @@ public class CallbackQueryHandler implements BotCommandHandler {
                     .append("\n");
         }
         return sb.toString();
+    }
+
+    private static InlineKeyboardMarkup createInterviewLevelKeyboard() {
+        var junior = InlineKeyboardButton.builder().text("Junior").callbackData("ci:level:JUNIOR").build();
+        var middle = InlineKeyboardButton.builder().text("Middle").callbackData("ci:level:MIDDLE").build();
+        var senior = InlineKeyboardButton.builder().text("Senior").callbackData("ci:level:SENIOR").build();
+        var cancel = InlineKeyboardButton.builder().text("Отмена").callbackData("ci:cancel").build();
+        return InlineKeyboardMarkup.builder().keyboard(List.of(
+                new InlineKeyboardRow(junior, middle, senior),
+                new InlineKeyboardRow(cancel)
+        )).build();
+    }
+
+    private static String levelLabel(Level level) {
+        if (level == null) return "—";
+        return switch (level) {
+            case JUNIOR -> "Junior";
+            case MIDDLE -> "Middle";
+            case SENIOR -> "Senior";
+        };
     }
 
     private static InlineKeyboardMarkup createInterviewLanguageKeyboard() {

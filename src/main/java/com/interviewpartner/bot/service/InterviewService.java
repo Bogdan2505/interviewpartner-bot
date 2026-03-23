@@ -4,6 +4,7 @@ import com.interviewpartner.bot.model.Interview;
 import com.interviewpartner.bot.model.InterviewFormat;
 import com.interviewpartner.bot.model.InterviewStatus;
 import com.interviewpartner.bot.model.Language;
+import com.interviewpartner.bot.model.Level;
 import com.interviewpartner.bot.model.User;
 import com.interviewpartner.bot.service.dto.AvailableSlotDto;
 
@@ -15,6 +16,7 @@ public interface InterviewService {
             Long candidateId,
             Long interviewerId,
             Language language,
+            Level level,
             InterviewFormat format,
             LocalDateTime dateTime,
             int durationMinutes,
@@ -23,11 +25,17 @@ public interface InterviewService {
 
     List<User> findAvailablePartners(Long userId, Language language, LocalDateTime dateTime);
 
-    /** Слоты, когда есть свободные интервьюеры (по таблице schedules). */
-    List<AvailableSlotDto> getAvailableSlotsAsCandidate(Long candidateUserId, Language language, int daysAhead);
+    /**
+     * Слоты от других пользователей (solo-слоты интервьюеров), к которым можно присоединиться кандидатом.
+     * @param level если не null — фильтрует по уровню
+     */
+    List<AvailableSlotDto> getAvailableSlotsAsCandidate(Long candidateUserId, Language language, Level level, int daysAhead);
 
-    /** Слоты, когда есть свободные кандидаты (по таблице candidate_slots). */
-    List<AvailableSlotDto> getAvailableSlotsAsInterviewer(Long interviewerUserId, Language language, int daysAhead);
+    /**
+     * Слоты от других пользователей (solo-слоты кандидатов), к которым можно присоединиться интервьюером.
+     * @param level если не null — фильтрует по уровню
+     */
+    List<AvailableSlotDto> getAvailableSlotsAsInterviewer(Long interviewerUserId, Language language, Level level, int daysAhead);
 
     /** Пытается автоматически создать собеседование для интервьюера с первым подходящим кандидатом. */
     List<Interview> tryAutoMatchForInterviewer(Long interviewerUserId, Language language);

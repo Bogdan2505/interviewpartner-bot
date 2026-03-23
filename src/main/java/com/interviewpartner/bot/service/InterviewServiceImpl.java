@@ -7,6 +7,7 @@ import com.interviewpartner.bot.model.Interview;
 import com.interviewpartner.bot.model.InterviewFormat;
 import com.interviewpartner.bot.model.InterviewStatus;
 import com.interviewpartner.bot.model.Language;
+import com.interviewpartner.bot.model.Level;
 import com.interviewpartner.bot.model.Schedule;
 import com.interviewpartner.bot.model.User;
 import com.interviewpartner.bot.repository.CandidateSlotRepository;
@@ -46,6 +47,7 @@ public class InterviewServiceImpl implements InterviewService {
             Long candidateId,
             Long interviewerId,
             Language language,
+            Level level,
             InterviewFormat format,
             LocalDateTime dateTime,
             int durationMinutes,
@@ -67,6 +69,7 @@ public class InterviewServiceImpl implements InterviewService {
                 .candidate(candidate)
                 .interviewer(interviewer)
                 .language(language)
+                .level(level)
                 .format(format)
                 .dateTime(dateTime)
                 .duration(durationMinutes)
@@ -89,23 +92,22 @@ public class InterviewServiceImpl implements InterviewService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<AvailableSlotDto> getAvailableSlotsAsCandidate(Long candidateUserId, Language language, int daysAhead) {
+    public List<AvailableSlotDto> getAvailableSlotsAsCandidate(Long candidateUserId, Language language, Level level, int daysAhead) {
         LocalDateTime now = LocalDateTime.now();
 
-        // Solo-слоты: интервьюер создал запись без кандидата (initiatorIsCandidate=false, candidate=interviewer)
         List<Interview> soloInterviewerSlots = interviewRepository.findOpenSoloSlots(
                 language, candidateUserId, false, now);
 
         List<AvailableSlotDto> out = new ArrayList<>();
         for (Interview interview : soloInterviewerSlots) {
             Long interviewerId = interview.getInterviewer().getId();
-            // дополнительно убеждаемся, что слот не принадлежит самому кандидату
             if (interviewerId.equals(candidateUserId)) continue;
-            // проверяем конфликты только с парными интервью (solo-слоты самого кандидата не блокируют поиск)
+            // Фильтрация по уровню: если уровень указан, показываем только совпадающие слоты
+            if (level != null && !level.equals(interview.getLevel())) continue;
             if (interviewRepository.findConflictingPairedInterviews(candidateUserId, interview.getDateTime(), SLOT_DURATION).isEmpty()) {
                 User interviewer = interview.getInterviewer();
-                String label = interviewer.getUsername() != null ? "@" + interviewer.getUsername() : "User " + interviewerId;
-                out.add(new AvailableSlotDto(interview.getDateTime(), interviewerId, label, interview.getId()));
+                String baseLabel = interviewer.getUsername() != null ? "@" + interviewer.getUsername() : "User " + interviewerId;
+                out.add(new AvailableSlotDto(interview.getDateTime(), interviewerId, baseLabel, interview.getId(), interview.getLevel()));
                 if (out.size() >= MAX_SLOTS_RETURNED) break;
             }
         }
@@ -115,23 +117,22 @@ public class InterviewServiceImpl implements InterviewService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<AvailableSlotDto> getAvailableSlotsAsInterviewer(Long interviewerUserId, Language language, int daysAhead) {
+    public List<AvailableSlotDto> getAvailableSlotsAsInterviewer(Long interviewerUserId, Language language, Level level, int daysAhead) {
         LocalDateTime now = LocalDateTime.now();
 
-        // Solo-слоты: кандидат создал запись без интервьюера (initiatorIsCandidate=true, candidate=interviewer)
-        List<Interview> soloSandidateSlots = interviewRepository.findOpenSoloSlots(
+        List<Interview> soloCandidateSlots = interviewRepository.findOpenSoloSlots(
                 language, interviewerUserId, true, now);
 
         List<AvailableSlotDto> out = new ArrayList<>();
-        for (Interview interview : soloSandidateSlots) {
+        for (Interview interview : soloCandidateSlots) {
             Long candidateId = interview.getCandidate().getId();
-            // дополнительно убеждаемся, что слот не принадлежит самому интервьюеру
             if (candidateId.equals(interviewerUserId)) continue;
-            // проверяем конфликты только с парными интервью (solo-слоты самого интервьюера не блокируют поиск)
+            // Фильтрация по уровню: если уровень указан, показываем только совпадающие слоты
+            if (level != null && !level.equals(interview.getLevel())) continue;
             if (interviewRepository.findConflictingPairedInterviews(interviewerUserId, interview.getDateTime(), SLOT_DURATION).isEmpty()) {
                 User candidate = interview.getCandidate();
-                String label = candidate.getUsername() != null ? "@" + candidate.getUsername() : "User " + candidateId;
-                out.add(new AvailableSlotDto(interview.getDateTime(), candidateId, label, interview.getId()));
+                String baseLabel = candidate.getUsername() != null ? "@" + candidate.getUsername() : "User " + candidateId;
+                out.add(new AvailableSlotDto(interview.getDateTime(), candidateId, baseLabel, interview.getId(), interview.getLevel()));
                 if (out.size() >= MAX_SLOTS_RETURNED) break;
             }
         }
@@ -202,7 +203,7 @@ public class InterviewServiceImpl implements InterviewService {
                             && interviewRepository.findConflictingInterviews(candidateId, dateTime, SLOT_DURATION).isEmpty()) {
                         try {
                             Interview interview = createInterview(candidateId, interviewerUserId, language,
-                                    InterviewFormat.TECHNICAL, dateTime, SLOT_DURATION, false);
+                                    null, InterviewFormat.TECHNICAL, dateTime, SLOT_DURATION, false);
                             created.add(interview);
                         } catch (Exception ignored) {
                         }
@@ -242,7 +243,7 @@ public class InterviewServiceImpl implements InterviewService {
                             && interviewRepository.findConflictingInterviews(candidateUserId, dateTime, SLOT_DURATION).isEmpty()) {
                         try {
                             Interview interview = createInterview(candidateUserId, interviewerId, language,
-                                    InterviewFormat.TECHNICAL, dateTime, SLOT_DURATION, true);
+                                    null, InterviewFormat.TECHNICAL, dateTime, SLOT_DURATION, true);
                             created.add(interview);
                         } catch (Exception ignored) {
                         }

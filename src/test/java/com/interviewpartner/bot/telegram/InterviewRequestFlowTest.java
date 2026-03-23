@@ -23,6 +23,7 @@ import java.time.LocalDateTime;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -81,7 +82,7 @@ class InterviewRequestFlowTest {
         Update update = mockCallbackUpdate(222L, "ir:accept:10");
         handler.handle(update, telegramClient);
 
-        verify(interviewService).createInterview(eq(1L), eq(2L), eq(Language.RUSSIAN), eq(InterviewFormat.TECHNICAL), any(), eq(60), eq(true));
+        verify(interviewService).createInterview(eq(1L), eq(2L), eq(Language.RUSSIAN), isNull(), eq(InterviewFormat.TECHNICAL), any(), eq(60), eq(true));
         verify(telegramClient, org.mockito.Mockito.atLeastOnce()).execute(any(SendMessage.class));
     }
 

@@ -38,7 +38,7 @@ class InterviewServiceTest {
     @Test
     void createInterview_shouldThrowIfUserNotFound() {
         assertThatThrownBy(() -> interviewService.createInterview(
-                1L, 2L, Language.RUSSIAN, InterviewFormat.TECHNICAL,
+                1L, 2L, Language.RUSSIAN, null, InterviewFormat.TECHNICAL,
                 LocalDateTime.of(2026, 3, 18, 12, 0), 60, true
         )).isInstanceOf(UserNotFoundException.class);
     }
@@ -52,6 +52,7 @@ class InterviewServiceTest {
                 candidate.getId(),
                 interviewer.getId(),
                 Language.RUSSIAN,
+                null,
                 InterviewFormat.TECHNICAL,
                 LocalDateTime.of(2026, 3, 18, 12, 0),
                 60,
@@ -72,6 +73,7 @@ class InterviewServiceTest {
                 candidate.getId(),
                 interviewer.getId(),
                 Language.RUSSIAN,
+                null,
                 InterviewFormat.TECHNICAL,
                 LocalDateTime.of(2026, 3, 18, 12, 0),
                 60,
@@ -82,6 +84,7 @@ class InterviewServiceTest {
                 candidate.getId(),
                 interviewer.getId(),
                 Language.RUSSIAN,
+                null,
                 InterviewFormat.BEHAVIORAL,
                 LocalDateTime.of(2026, 3, 18, 12, 30),
                 30,
@@ -98,6 +101,7 @@ class InterviewServiceTest {
                 candidate.getId(),
                 interviewer.getId(),
                 Language.ENGLISH,
+                null,
                 InterviewFormat.BEHAVIORAL,
                 LocalDateTime.of(2026, 3, 18, 14, 0),
                 30,
@@ -117,6 +121,7 @@ class InterviewServiceTest {
                 candidate.getId(),
                 interviewer.getId(),
                 Language.ENGLISH,
+                null,
                 InterviewFormat.TECHNICAL,
                 LocalDateTime.of(2026, 3, 18, 16, 0),
                 30,

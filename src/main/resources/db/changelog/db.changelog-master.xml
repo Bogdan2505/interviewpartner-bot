@@ -29,4 +29,12 @@
                 stripComments="true"/>
     </changeSet>
 
+    <changeSet id="004-interview-level" author="interviewpartner">
+        <sqlFile
+                path="sql/004_interview_level.sql"
+                relativeToChangelogFile="true"
+                splitStatements="true"
+                stripComments="true"/>
+    </changeSet>
+
 </databaseChangeLog>
