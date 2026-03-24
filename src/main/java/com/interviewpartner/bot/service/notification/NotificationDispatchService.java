@@ -1,5 +1,6 @@
 package com.interviewpartner.bot.service.notification;
 
+import com.interviewpartner.bot.model.Interview;
 import com.interviewpartner.bot.model.InterviewStatus;
 import com.interviewpartner.bot.model.Notification;
 import com.interviewpartner.bot.model.ReminderType;
@@ -10,6 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -39,9 +41,9 @@ public class NotificationDispatchService {
         );
 
         for (var interview : interviews) {
-            createIfMissing(interview.getId(), ReminderType.HOURS_24, interview.getDateTime().minusHours(24), interview);
-            createIfMissing(interview.getId(), ReminderType.HOURS_1, interview.getDateTime().minusHours(1), interview);
-            createIfMissing(interview.getId(), ReminderType.MINUTES_15, interview.getDateTime().minusMinutes(15), interview);
+            createIfMissing(interview.getId(), ReminderType.HOURS_24, interview.getDateTime().minusHours(24), interview, now);
+            createIfMissing(interview.getId(), ReminderType.HOURS_1, interview.getDateTime().minusHours(1), interview, now);
+            createIfMissing(interview.getId(), ReminderType.MINUTES_15, interview.getDateTime().minusMinutes(15), interview, now);
         }
     }
 
@@ -50,10 +52,18 @@ public class NotificationDispatchService {
         List<Notification> due = notificationRepository.findBySentAtIsNullAndScheduledAtLessThanEqual(now);
         for (Notification n : due) {
             try {
+                Interview interview = n.getInterview();
+                if (shouldSkipStaleReminder(interview, n.getType(), now)) {
+                    log.info("Пропуск устаревшего напоминания (текст уже не соответствует времени): notificationId={}, type={}, interviewId={}",
+                            n.getId(), n.getType(), interview.getId());
+                    n.setSentAt(now);
+                    notificationRepository.save(n);
+                    continue;
+                }
                 if (reminderSender.isPresent()) {
-                    reminderSender.get().sendReminder(n.getInterview(), n.getType());
+                    reminderSender.get().sendReminder(interview, n.getType());
                 } else {
-                    log.info("Reminder due (no sender configured): interviewId={}, type={}", n.getInterview().getId(), n.getType());
+                    log.info("Reminder due (no sender configured): interviewId={}, type={}", interview.getId(), n.getType());
                 }
                 n.setSentAt(now);
                 notificationRepository.save(n);
@@ -63,7 +73,26 @@ public class NotificationDispatchService {
         }
     }
 
-    private void createIfMissing(Long interviewId, ReminderType type, LocalDateTime scheduledAt, com.interviewpartner.bot.model.Interview interview) {
+    /**
+     * Если собеседование создали поздно, момент «за 24 ч» уже в прошлом — не шлём текст «24 часа», когда до старта остались часы.
+     */
+    static boolean shouldSkipStaleReminder(Interview interview, ReminderType type, LocalDateTime now) {
+        LocalDateTime start = interview.getDateTime();
+        if (!start.isAfter(now)) {
+            return true;
+        }
+        Duration until = Duration.between(now, start);
+        return switch (type) {
+            case HOURS_24 -> until.toHours() < 20;
+            case HOURS_1 -> until.toMinutes() < 45 || until.toHours() >= 2;
+            case MINUTES_15 -> until.toMinutes() > 25 || until.toMinutes() < 2;
+        };
+    }
+
+    private void createIfMissing(Long interviewId, ReminderType type, LocalDateTime scheduledAt, Interview interview, LocalDateTime now) {
+        if (!scheduledAt.isAfter(now)) {
+            return;
+        }
         if (notificationRepository.existsByInterviewIdAndType(interviewId, type)) {
             return;
         }

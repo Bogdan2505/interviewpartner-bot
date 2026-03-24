@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+    <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
+
+    <!-- Активный файл; шаблон ротации задавайте отдельно (тот же каталог и базовое имя, суффикс .%i.log) -->
+    <springProperty scope="context" name="LOG_FILE" source="logging.file.name" defaultValue="logs/interview-bot.log"/>
+    <springProperty scope="context" name="LOG_ROLL_PATTERN" source="logging.logback.rollingpolicy.file-name-pattern" defaultValue="logs/interview-bot.%i.log"/>
+    <!--
+      Ротация по размеру (в Logback нет ротации «по числу строк»).
+      10MB ≈ порядка 30 000 строк при типичной длине строки ~300 байт.
+    -->
+    <springProperty scope="context" name="LOG_MAX_SIZE" source="logging.logback.rollingpolicy.max-file-size" defaultValue="10MB"/>
+
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_FILE}</file>
+        <!-- Один архивный слот: при переполнении текущий файл → interview-bot.1.log, затем снова пишется пустой активный файл -->
+        <rollingPolicy class="ch.qos.logback.core.rolling.FixedWindowRollingPolicy">
+            <fileNamePattern>${LOG_ROLL_PATTERN}</fileNamePattern>
+            <minIndex>1</minIndex>
+            <maxIndex>1</maxIndex>
+        </rollingPolicy>
+        <triggeringPolicy class="ch.qos.logback.core.rolling.SizeBasedTriggeringPolicy">
+            <maxFileSize>${LOG_MAX_SIZE}</maxFileSize>
+        </triggeringPolicy>
+        <encoder>
+            <pattern>${FILE_LOG_PATTERN}</pattern>
+            <charset>${FILE_LOG_CHARSET}</charset>
+        </encoder>
+    </appender>
+
+    <!-- В тестах только консоль, без файла -->
+    <springProfile name="test">
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+    </springProfile>
+
+    <springProfile name="!test">
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="FILE"/>
+        </root>
+    </springProfile>
+</configuration>

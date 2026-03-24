@@ -55,7 +55,7 @@ class NotificationDispatchDueTest {
         Interview interview = interviewRepository.saveAndFlush(Interview.builder()
                 .candidate(u1).interviewer(u2)
                 .language(Language.RUSSIAN).format(InterviewFormat.TECHNICAL)
-                .dateTime(now.plusMinutes(30)).duration(60).status(InterviewStatus.SCHEDULED)
+                .dateTime(now.plusMinutes(15)).duration(60).status(InterviewStatus.SCHEDULED)
                 .build());
         notificationRepository.saveAndFlush(Notification.builder()
                 .interview(interview)

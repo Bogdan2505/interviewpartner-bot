@@ -46,12 +46,13 @@ class NotificationDispatchServiceTest {
         User u1 = userRepository.saveAndFlush(user("u1", 1L));
         User u2 = userRepository.saveAndFlush(user("u2", 2L));
         LocalDateTime now = LocalDateTime.of(2026, 3, 18, 12, 0);
+        // В окне [now, now+25ч) для ensureNotifications и позже now+24ч, чтобы «за 24ч» ещё не наступило
         Interview interview = interviewRepository.saveAndFlush(Interview.builder()
                 .candidate(u1)
                 .interviewer(u2)
                 .language(Language.RUSSIAN)
                 .format(InterviewFormat.TECHNICAL)
-                .dateTime(now.plusHours(10))
+                .dateTime(now.plusHours(24).plusMinutes(30))
                 .duration(60)
                 .status(InterviewStatus.SCHEDULED)
                 .build());
