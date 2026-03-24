@@ -6,9 +6,11 @@ import com.interviewpartner.bot.model.Level;
 import com.interviewpartner.bot.model.User;
 import com.interviewpartner.bot.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional
@@ -19,10 +21,14 @@ public class UserServiceImpl implements UserService {
     @Override
     public User registerUser(Long telegramId, String username) {
         return userRepository.findByTelegramId(telegramId)
-                .orElseGet(() -> userRepository.save(User.builder()
-                        .telegramId(telegramId)
-                        .username(username)
-                        .build()));
+                .orElseGet(() -> {
+                    User saved = userRepository.save(User.builder()
+                            .telegramId(telegramId)
+                            .username(username)
+                            .build());
+                    log.info("Зарегистрирован новый пользователь: userId={}, telegramId={}", saved.getId(), telegramId);
+                    return saved;
+                });
     }
 
     @Override
@@ -44,7 +50,9 @@ public class UserServiceImpl implements UserService {
         var user = userRepository.findById(userId)
                 .orElseThrow(() -> new UserNotFoundException("User with id=" + userId + " not found"));
         user.setLanguage(language);
-        return userRepository.save(user);
+        User saved = userRepository.save(user);
+        log.info("Обновлён язык пользователя: userId={}, language={}", userId, language);
+        return saved;
     }
 
     @Override
@@ -52,7 +60,9 @@ public class UserServiceImpl implements UserService {
         var user = userRepository.findById(userId)
                 .orElseThrow(() -> new UserNotFoundException("User with id=" + userId + " not found"));
         user.setLevel(level);
-        return userRepository.save(user);
+        User saved = userRepository.save(user);
+        log.info("Обновлён грейд пользователя: userId={}, level={}", userId, level);
+        return saved;
     }
 }
 

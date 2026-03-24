@@ -7,6 +7,7 @@ import com.interviewpartner.bot.model.Schedule;
 import com.interviewpartner.bot.repository.ScheduleRepository;
 import com.interviewpartner.bot.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,6 +19,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.TreeSet;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional
@@ -45,7 +47,7 @@ public class ScheduleServiceImpl implements ScheduleService {
         var user = userRepository.findById(userId)
                 .orElseThrow(() -> new UserNotFoundException("User with id=" + userId + " not found"));
 
-        return scheduleRepository.save(Schedule.builder()
+        Schedule saved = scheduleRepository.save(Schedule.builder()
                 .user(user)
                 .language(language)
                 .dayOfWeek(dayOfWeek)
@@ -53,11 +55,15 @@ public class ScheduleServiceImpl implements ScheduleService {
                 .endTime(endTime)
                 .isAvailable(true)
                 .build());
+        log.info("Добавлен слот расписания (интервьюер): scheduleId={}, userId={}, day={}, {}-{}, language={}",
+                saved.getId(), userId, dayOfWeek, startTime, endTime, language);
+        return saved;
     }
 
     @Override
     public void removeAvailability(Long scheduleId) {
         scheduleRepository.deleteById(scheduleId);
+        log.info("Удалён слот расписания: scheduleId={}", scheduleId);
     }
 
     @Override

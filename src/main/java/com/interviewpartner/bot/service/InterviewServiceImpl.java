@@ -16,6 +16,7 @@ import com.interviewpartner.bot.repository.ScheduleRepository;
 import com.interviewpartner.bot.repository.UserRepository;
 import com.interviewpartner.bot.service.dto.AvailableSlotDto;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,6 +29,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.TreeSet;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional
@@ -65,7 +67,7 @@ public class InterviewServiceImpl implements InterviewService {
             throw new InterviewConflictException("Interviewer has conflicting interview");
         }
 
-        return interviewRepository.save(Interview.builder()
+        Interview saved = interviewRepository.save(Interview.builder()
                 .candidate(candidate)
                 .interviewer(interviewer)
                 .language(language)
@@ -76,6 +78,9 @@ public class InterviewServiceImpl implements InterviewService {
                 .status(InterviewStatus.SCHEDULED)
                 .initiatorIsCandidate(initiatorIsCandidate)
                 .build());
+        log.info("Собеседование создано: id={}, candidateId={}, interviewerId={}, language={}, level={}, time={}, initiatorIsCandidate={}",
+                saved.getId(), candidateId, interviewerId, language, level, dateTime, initiatorIsCandidate);
+        return saved;
     }
 
     @Override
@@ -153,15 +158,15 @@ public class InterviewServiceImpl implements InterviewService {
         }
         Interview saved = interviewRepository.save(interview);
 
-        // Отменяем собственные solo-слоты пользователя в это же время (они уже не нужны)
-        cancelConflictingSoloSlots(userId, saved.getDateTime(), saved.getDuration(), saved.getId());
-
+        int cancelledSolo = cancelConflictingSoloSlots(userId, saved.getDateTime(), saved.getDuration(), saved.getId());
+        log.info("Пользователь присоединился к собеседованию: interviewId={}, userId={}, asCandidate={}, cancelledSoloSlots={}",
+                saved.getId(), userId, asCandidate, cancelledSolo);
         return saved;
     }
 
-    private void cancelConflictingSoloSlots(Long userId, LocalDateTime joinedAt, int durationMinutes, Long excludeInterviewId) {
+    private int cancelConflictingSoloSlots(Long userId, LocalDateTime joinedAt, int durationMinutes, Long excludeInterviewId) {
         LocalDateTime joinedEnd = joinedAt.plusMinutes(durationMinutes);
-        interviewRepository.findUserInterviewsStartingBefore(userId, joinedEnd).stream()
+        var toCancel = interviewRepository.findUserInterviewsStartingBefore(userId, joinedEnd).stream()
                 .filter(i -> !i.getId().equals(excludeInterviewId))
                 .filter(i -> {
                     var end = i.getDateTime().plusMinutes(i.getDuration());
@@ -170,10 +175,12 @@ public class InterviewServiceImpl implements InterviewService {
                 .filter(i -> i.getCandidate() != null && i.getInterviewer() != null
                         && i.getCandidate().getId() != null
                         && i.getCandidate().getId().equals(i.getInterviewer().getId()))
-                .forEach(i -> {
-                    i.setStatus(InterviewStatus.CANCELLED);
-                    interviewRepository.save(i);
-                });
+                .toList();
+        toCancel.forEach(i -> {
+            i.setStatus(InterviewStatus.CANCELLED);
+            interviewRepository.save(i);
+        });
+        return toCancel.size();
     }
 
     @Override
@@ -210,7 +217,10 @@ public class InterviewServiceImpl implements InterviewService {
                         break;
                     }
                 }
-                if (!created.isEmpty()) return created;
+                if (!created.isEmpty()) {
+                    log.info("Автоподбор для интервьюера: создано собеседований={}, userId={}", created.size(), interviewerUserId);
+                    return created;
+                }
             }
         }
         return created;
@@ -250,7 +260,10 @@ public class InterviewServiceImpl implements InterviewService {
                         break;
                     }
                 }
-                if (!created.isEmpty()) return created;
+                if (!created.isEmpty()) {
+                    log.info("Автоподбор для кандидата: создано собеседований={}, userId={}", created.size(), candidateUserId);
+                    return created;
+                }
             }
         }
         return created;
@@ -267,7 +280,9 @@ public class InterviewServiceImpl implements InterviewService {
         var interview = interviewRepository.findById(interviewId)
                 .orElseThrow(() -> new IllegalArgumentException("Interview with id=" + interviewId + " not found"));
         interview.setStatus(InterviewStatus.CANCELLED);
-        return interviewRepository.save(interview);
+        Interview saved = interviewRepository.save(interview);
+        log.info("Собеседование отменено: interviewId={}", interviewId);
+        return saved;
     }
 
     @Override
@@ -275,7 +290,9 @@ public class InterviewServiceImpl implements InterviewService {
         var interview = interviewRepository.findById(interviewId)
                 .orElseThrow(() -> new IllegalArgumentException("Interview with id=" + interviewId + " not found"));
         interview.setStatus(InterviewStatus.COMPLETED);
-        return interviewRepository.save(interview);
+        Interview saved = interviewRepository.save(interview);
+        log.info("Собеседование завершено: interviewId={}", interviewId);
+        return saved;
     }
 
     // ---- helpers ----

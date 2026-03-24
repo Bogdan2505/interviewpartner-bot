@@ -8,11 +8,13 @@ import com.interviewpartner.bot.model.Language;
 import com.interviewpartner.bot.repository.InterviewRequestRepository;
 import com.interviewpartner.bot.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional
@@ -33,7 +35,7 @@ public class InterviewRequestServiceImpl implements InterviewRequestService {
         var interviewer = userRepository.findById(interviewerUserId)
                 .orElseThrow(() -> new UserNotFoundException("User with id=" + interviewerUserId + " not found"));
 
-        return interviewRequestRepository.save(InterviewRequest.builder()
+        InterviewRequest saved = interviewRequestRepository.save(InterviewRequest.builder()
                 .candidate(candidate)
                 .interviewer(interviewer)
                 .language(language)
@@ -44,6 +46,9 @@ public class InterviewRequestServiceImpl implements InterviewRequestService {
                 .createdAt(LocalDateTime.now())
                 .respondedAt(null)
                 .build());
+        log.info("Создан запрос на собеседование: requestId={}, candidateId={}, interviewerId={}, time={}",
+                saved.getId(), candidateUserId, interviewerUserId, dateTime);
+        return saved;
     }
 
     @Override
@@ -51,7 +56,9 @@ public class InterviewRequestServiceImpl implements InterviewRequestService {
         var req = getPending(requestId);
         req.setStatus(InterviewRequestStatus.ACCEPTED);
         req.setRespondedAt(now);
-        return interviewRequestRepository.save(req);
+        InterviewRequest saved = interviewRequestRepository.save(req);
+        log.info("Запрос на собеседование принят: requestId={}", requestId);
+        return saved;
     }
 
     @Override
@@ -59,7 +66,9 @@ public class InterviewRequestServiceImpl implements InterviewRequestService {
         var req = getPending(requestId);
         req.setStatus(InterviewRequestStatus.DECLINED);
         req.setRespondedAt(now);
-        return interviewRequestRepository.save(req);
+        InterviewRequest saved = interviewRequestRepository.save(req);
+        log.info("Запрос на собеседование отклонён: requestId={}", requestId);
+        return saved;
     }
 
     @Override
