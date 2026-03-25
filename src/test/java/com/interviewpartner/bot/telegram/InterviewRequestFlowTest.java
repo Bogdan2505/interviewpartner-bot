@@ -1,5 +1,6 @@
 package com.interviewpartner.bot.telegram;
 
+import com.interviewpartner.bot.model.Interview;
 import com.interviewpartner.bot.model.InterviewFormat;
 import com.interviewpartner.bot.model.Language;
 import com.interviewpartner.bot.model.InterviewRequest;
@@ -79,10 +80,20 @@ class InterviewRequestFlowTest {
 
         when(interviewRequestService.accept(eq(10L), any())).thenReturn(req);
 
+        Interview createdInterview = mock(Interview.class);
+        when(createdInterview.getId()).thenReturn(99L);
+        when(createdInterview.getVideoMeetingUrl()).thenReturn(null);
+        when(createdInterview.getCandidate()).thenReturn(candidate);
+        when(createdInterview.getInterviewer()).thenReturn(partner);
+        when(interviewService.createInterview(eq(1L), eq(2L), eq(Language.RUSSIAN), isNull(), eq(InterviewFormat.TECHNICAL), any(), eq(60), eq(true)))
+                .thenReturn(createdInterview);
+        when(interviewService.getInterviewWithParticipants(99L)).thenReturn(createdInterview);
+
         Update update = mockCallbackUpdate(222L, "ir:accept:10");
         handler.handle(update, telegramClient);
 
         verify(interviewService).createInterview(eq(1L), eq(2L), eq(Language.RUSSIAN), isNull(), eq(InterviewFormat.TECHNICAL), any(), eq(60), eq(true));
+        verify(interviewService).getInterviewWithParticipants(99L);
         verify(telegramClient, org.mockito.Mockito.atLeastOnce()).execute(any(SendMessage.class));
     }
 

@@ -49,6 +49,11 @@ public interface InterviewService {
      */
     Interview joinInterview(Long interviewId, Long userId, boolean asCandidate);
 
+    /**
+     * Интервью с подгруженными кандидатом и интервьюером (для текста в Telegram вне транзакции создания).
+     */
+    Interview getInterviewWithParticipants(Long id);
+
     List<Interview> getUserInterviews(Long userId, InterviewStatus status);
 
     Interview cancelInterview(Long interviewId);

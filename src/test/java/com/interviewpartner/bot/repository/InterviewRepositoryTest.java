@@ -86,5 +86,29 @@ class InterviewRepositoryTest {
 
         assertThat(found).hasSize(1);
     }
+
+    @Test
+    void findByIdWithParticipants_joinFetchCandidateAndInterviewer() {
+        var candidate = userRepository.saveAndFlush(User.builder()
+                .telegramId(20L).username("c20").language(Language.RUSSIAN).level(Level.JUNIOR)
+                .build());
+        var interviewer = userRepository.saveAndFlush(User.builder()
+                .telegramId(21L).username("i21").language(Language.RUSSIAN).level(Level.JUNIOR)
+                .build());
+        var saved = interviewRepository.saveAndFlush(Interview.builder()
+                .candidate(candidate)
+                .interviewer(interviewer)
+                .language(Language.RUSSIAN)
+                .format(InterviewFormat.TECHNICAL)
+                .dateTime(LocalDateTime.of(2026, 4, 1, 10, 0))
+                .duration(60)
+                .status(InterviewStatus.SCHEDULED)
+                .build());
+
+        var found = interviewRepository.findByIdWithParticipants(saved.getId()).orElseThrow();
+
+        assertThat(found.getCandidate().getUsername()).isEqualTo("c20");
+        assertThat(found.getInterviewer().getUsername()).isEqualTo("i21");
+    }
 }
 

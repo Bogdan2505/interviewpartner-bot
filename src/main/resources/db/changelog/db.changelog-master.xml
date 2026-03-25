@@ -37,4 +37,20 @@
                 stripComments="true"/>
     </changeSet>
 
+    <changeSet id="005-interview-telemost" author="interviewpartner">
+        <sqlFile
+                path="sql/005_interview_telemost.sql"
+                relativeToChangelogFile="true"
+                splitStatements="true"
+                stripComments="true"/>
+    </changeSet>
+
+    <changeSet id="006-rename-video-meeting-url" author="interviewpartner">
+        <sqlFile
+                path="sql/006_rename_video_meeting_url.sql"
+                relativeToChangelogFile="true"
+                splitStatements="true"
+                stripComments="true"/>
+    </changeSet>
+
 </databaseChangeLog>

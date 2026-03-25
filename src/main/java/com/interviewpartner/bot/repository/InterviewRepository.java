@@ -9,9 +9,18 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 public interface InterviewRepository extends JpaRepository<Interview, Long> {
+
+    @Query("""
+            select i from Interview i
+            join fetch i.candidate
+            join fetch i.interviewer
+            where i.id = :id
+            """)
+    Optional<Interview> findByIdWithParticipants(@Param("id") Long id);
 
     List<Interview> findByDateTimeBetween(LocalDateTime startInclusive, LocalDateTime endExclusive);
 

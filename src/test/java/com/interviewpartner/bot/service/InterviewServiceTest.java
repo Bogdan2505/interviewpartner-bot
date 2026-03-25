@@ -132,6 +132,28 @@ class InterviewServiceTest {
         assertThat(completed.getStatus()).isEqualTo(InterviewStatus.COMPLETED);
     }
 
+    @Test
+    void getInterviewWithParticipants_returnsInterviewWithUsers() {
+        var candidate = createUser(310L, "c310");
+        var interviewer = createUser(311L, "i311");
+        var created = interviewService.createInterview(
+                candidate.getId(),
+                interviewer.getId(),
+                Language.RUSSIAN,
+                null,
+                InterviewFormat.TECHNICAL,
+                LocalDateTime.of(2026, 4, 2, 15, 0),
+                60,
+                true
+        );
+
+        var loaded = interviewService.getInterviewWithParticipants(created.getId());
+
+        assertThat(loaded.getId()).isEqualTo(created.getId());
+        assertThat(loaded.getCandidate().getUsername()).isEqualTo("c310");
+        assertThat(loaded.getInterviewer().getUsername()).isEqualTo("i311");
+    }
+
     private User createUser(long telegramId, String username) {
         return userRepository.saveAndFlush(User.builder()
                 .telegramId(telegramId)

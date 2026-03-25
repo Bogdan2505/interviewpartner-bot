@@ -32,6 +32,10 @@ public class TelegramReminderSender implements ReminderSender {
             case HOURS_1 -> "Напоминание: до собеседования 1 час.";
             case MINUTES_15 -> "Напоминание: до собеседования 15 минут.";
         } + "\nДата/время: " + DT.format(interview.getDateTime());
+        String joinUrl = interview.getVideoMeetingUrl();
+        if (joinUrl != null && !joinUrl.isBlank()) {
+            text += "\n\nСсылка на встречу (Jitsi Meet, хорошо работает в Chrome и Yandex):\n" + joinUrl;
+        }
 
         try {
             client.execute(SendMessage.builder()

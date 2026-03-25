@@ -15,8 +15,8 @@ import com.interviewpartner.bot.repository.InterviewRepository;
 import com.interviewpartner.bot.repository.ScheduleRepository;
 import com.interviewpartner.bot.repository.UserRepository;
 import com.interviewpartner.bot.service.dto.AvailableSlotDto;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,7 +31,6 @@ import java.util.TreeSet;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 @Transactional
 public class InterviewServiceImpl implements InterviewService {
 
@@ -43,6 +42,24 @@ public class InterviewServiceImpl implements InterviewService {
     private final UserRepository userRepository;
     private final ScheduleRepository scheduleRepository;
     private final CandidateSlotRepository candidateSlotRepository;
+
+    private final String jitsiMeetBaseUrl;
+
+    public InterviewServiceImpl(
+            InterviewRepository interviewRepository,
+            UserRepository userRepository,
+            ScheduleRepository scheduleRepository,
+            CandidateSlotRepository candidateSlotRepository,
+            @Value("${video-meeting.jitsi-base-url:https://meet.jit.si}") String jitsiMeetBaseUrl
+    ) {
+        this.interviewRepository = interviewRepository;
+        this.userRepository = userRepository;
+        this.scheduleRepository = scheduleRepository;
+        this.candidateSlotRepository = candidateSlotRepository;
+        this.jitsiMeetBaseUrl = jitsiMeetBaseUrl.endsWith("/")
+                ? jitsiMeetBaseUrl.substring(0, jitsiMeetBaseUrl.length() - 1)
+                : jitsiMeetBaseUrl;
+    }
 
     @Override
     public Interview createInterview(
@@ -80,6 +97,7 @@ public class InterviewServiceImpl implements InterviewService {
                 .build());
         log.info("Собеседование создано: id={}, candidateId={}, interviewerId={}, language={}, level={}, time={}, initiatorIsCandidate={}",
                 saved.getId(), candidateId, interviewerId, language, level, dateTime, initiatorIsCandidate);
+        attachJitsiIfPaired(saved);
         return saved;
     }
 
@@ -161,7 +179,15 @@ public class InterviewServiceImpl implements InterviewService {
         int cancelledSolo = cancelConflictingSoloSlots(userId, saved.getDateTime(), saved.getDuration(), saved.getId());
         log.info("Пользователь присоединился к собеседованию: interviewId={}, userId={}, asCandidate={}, cancelledSoloSlots={}",
                 saved.getId(), userId, asCandidate, cancelledSolo);
+        attachJitsiIfPaired(saved);
         return saved;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Interview getInterviewWithParticipants(Long id) {
+        return interviewRepository.findByIdWithParticipants(id)
+                .orElseThrow(() -> new IllegalArgumentException("Interview not found: " + id));
     }
 
     private int cancelConflictingSoloSlots(Long userId, LocalDateTime joinedAt, int durationMinutes, Long excludeInterviewId) {
@@ -296,6 +322,29 @@ public class InterviewServiceImpl implements InterviewService {
     }
 
     // ---- helpers ----
+
+    private void attachJitsiIfPaired(Interview interview) {
+        if (interview.getCandidate() == null || interview.getInterviewer() == null) {
+            return;
+        }
+        Long cId = interview.getCandidate().getId();
+        Long iId = interview.getInterviewer().getId();
+        if (cId == null || iId == null || cId.equals(iId)) {
+            return;
+        }
+        String existing = interview.getVideoMeetingUrl();
+        if (existing != null && !existing.isBlank()) {
+            return;
+        }
+        String url = buildJitsiRoomUrl(interview.getId());
+        interview.setVideoMeetingUrl(url);
+        interviewRepository.save(interview);
+        log.info("Ссылка на видеовстречу (Jitsi Meet): interviewId={}, url={}", interview.getId(), url);
+    }
+
+    private String buildJitsiRoomUrl(long interviewId) {
+        return jitsiMeetBaseUrl + "/interviewpartner-" + interviewId;
+    }
 
     private boolean isInterviewerAvailable(Long interviewerId, LocalDateTime dateTime) {
         if (dateTime == null) return false;

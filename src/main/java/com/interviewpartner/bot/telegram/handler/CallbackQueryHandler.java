@@ -378,7 +378,8 @@ public class CallbackQueryHandler implements BotCommandHandler {
                         // Присоединяемся к существующему solo-слоту
                         Long myId = state.asCandidate ? state.candidateUserId : state.interviewerUserId;
                         Long creatorId = state.asCandidate ? state.interviewerUserId : state.candidateUserId;
-                        interviewService.joinInterview(state.joinInterviewId, myId, state.asCandidate);
+                        Interview joined = interviewService.joinInterview(state.joinInterviewId, myId, state.asCandidate);
+                        Interview forVideo = interviewService.getInterviewWithParticipants(joined.getId());
 
                         User joiner = userService.getUserById(myId);
                         User creator = userService.getUserById(creatorId);
@@ -390,6 +391,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
                         String dtStr = DT_FORMAT.format(state.dateTime);
 
                         String levelInfo = state.level != null ? "\nГрейд: " + levelLabel(state.level) : "";
+                        String meetingLinkBlock = videoMeetingBlock(forVideo);
 
                         // Уведомление присоединившемуся
                         telegramClient.execute(SendMessage.builder()
@@ -399,7 +401,8 @@ public class CallbackQueryHandler implements BotCommandHandler {
                                         + "Язык: " + state.language
                                         + levelInfo + "\n"
                                         + "Партнёр: " + creatorLabel + "\n"
-                                        + "Ваша роль: " + joinerRole)
+                                        + "Ваша роль: " + joinerRole
+                                        + meetingLinkBlock)
                                 .build());
 
                         // Уведомление создателю слота
@@ -409,7 +412,8 @@ public class CallbackQueryHandler implements BotCommandHandler {
                                         + "Язык: " + state.language
                                         + levelInfo + "\n"
                                         + "Партнёр: " + joinerLabel + "\n"
-                                        + "Ваша роль: " + creatorRole);
+                                        + "Ваша роль: " + creatorRole
+                                        + meetingLinkBlock);
                     } else {
                         interviewService.createInterview(
                                 state.candidateUserId,
@@ -439,6 +443,41 @@ public class CallbackQueryHandler implements BotCommandHandler {
                 }
             }
         }
+    }
+
+    private static String videoMeetingBlock(Interview interview) {
+        String appendix = meetingLinkAppendix(interview);
+        if (!appendix.isEmpty()) {
+            return appendix;
+        }
+        if (!isPairedInterview(interview)) {
+            return "";
+        }
+        return "\n\nСсылка на видеовстречу не сформирована. Обратитесь к администратору бота.";
+    }
+
+    private static boolean isPairedInterview(Interview interview) {
+        if (interview == null) {
+            return false;
+        }
+        var c = interview.getCandidate();
+        var i = interview.getInterviewer();
+        if (c == null || i == null || c.getId() == null || i.getId() == null) {
+            return false;
+        }
+        return !c.getId().equals(i.getId());
+    }
+
+    private static String meetingLinkAppendix(Interview interview) {
+        if (interview == null) {
+            return "";
+        }
+        String url = interview.getVideoMeetingUrl();
+        if (url == null || url.isBlank()) {
+            return "";
+        }
+        String suffix = url.contains("meet.jit.si") ? " (Jitsi Meet, хорошо работает в Chrome и Yandex)" : "";
+        return "\n\nСсылка на встречу" + suffix + ":\n" + url;
     }
 
     private static InlineKeyboardMarkup confirmKeyboard() {
@@ -704,7 +743,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
         if (action.equals("accept")) {
             var req = interviewRequestService.accept(requestId, LocalDateTime.now());
             try {
-                interviewService.createInterview(
+                Interview created = interviewService.createInterview(
                         req.getCandidate().getId(),
                         req.getInterviewer().getId(),
                         req.getLanguage(),
@@ -714,12 +753,14 @@ public class CallbackQueryHandler implements BotCommandHandler {
                         req.getDurationMinutes(),
                         true
                 );
-                telegramClient.execute(SendMessage.builder().chatId(chatId).text("Принято. Собеседование создано.").build());
+                Interview forVideo = interviewService.getInterviewWithParticipants(created.getId());
+                String meetingLinkBlock = videoMeetingBlock(forVideo);
+                telegramClient.execute(SendMessage.builder().chatId(chatId).text("Принято. Собеседование создано." + meetingLinkBlock).build());
                 sendMainMenu(chatId, telegramClient);
                 User candidate = userService.getUserById(req.getCandidate().getId());
                 telegramClient.execute(SendMessage.builder()
                         .chatId(candidate.getTelegramId())
-                        .text("Партнёр принял запрос. Собеседование создано на " + DT_FORMAT.format(req.getDateTime()) + ".")
+                        .text("Партнёр принял запрос. Собеседование создано на " + DT_FORMAT.format(req.getDateTime()) + "." + meetingLinkBlock)
                         .replyMarkup(ChatMenuKeyboardBuilder.buildPersistentKeyboard())
                         .build());
             } catch (InterviewConflictException e) {
