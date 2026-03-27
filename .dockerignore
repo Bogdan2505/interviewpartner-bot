@@ -1,0 +1,10 @@
+.gradle
+build
+.git
+.gitignore
+logs
+*.log
+.idea
+*.iml
+.cursor
+**/mcps
