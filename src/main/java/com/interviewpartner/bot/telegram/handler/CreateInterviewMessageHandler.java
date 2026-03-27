@@ -68,6 +68,13 @@ public class CreateInterviewMessageHandler implements BotCommandHandler {
                             .build());
                     return;
                 }
+                if (dt.isBefore(LocalDateTime.now())) {
+                    telegramClient.execute(SendMessage.builder()
+                            .chatId(chatId)
+                            .text("Нельзя выбрать дату и время в прошлом. Укажите момент не раньше текущего.")
+                            .build());
+                    return;
+                }
                 state.dateTime = dt;
                 state.step = CreateInterviewState.Step.DURATION;
                 telegramClient.execute(SendMessage.builder()

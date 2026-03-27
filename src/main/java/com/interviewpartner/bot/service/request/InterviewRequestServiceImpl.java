@@ -35,6 +35,11 @@ public class InterviewRequestServiceImpl implements InterviewRequestService {
         var interviewer = userRepository.findById(interviewerUserId)
                 .orElseThrow(() -> new UserNotFoundException("User with id=" + interviewerUserId + " not found"));
 
+        LocalDateTime now = LocalDateTime.now();
+        if (dateTime.isBefore(now)) {
+            throw new IllegalArgumentException("Interview request time must not be in the past");
+        }
+
         InterviewRequest saved = interviewRequestRepository.save(InterviewRequest.builder()
                 .candidate(candidate)
                 .interviewer(interviewer)

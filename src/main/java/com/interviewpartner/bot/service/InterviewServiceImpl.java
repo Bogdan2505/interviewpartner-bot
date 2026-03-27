@@ -77,6 +77,11 @@ public class InterviewServiceImpl implements InterviewService {
         var interviewer = userRepository.findById(interviewerId)
                 .orElseThrow(() -> new UserNotFoundException("User with id=" + interviewerId + " not found"));
 
+        LocalDateTime now = LocalDateTime.now();
+        if (dateTime.isBefore(now)) {
+            throw new IllegalArgumentException("Interview time must not be in the past");
+        }
+
         if (!interviewRepository.findConflictingInterviews(candidateId, dateTime, durationMinutes).isEmpty()) {
             throw new InterviewConflictException("Candidate has conflicting interview");
         }

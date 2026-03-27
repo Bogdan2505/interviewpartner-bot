@@ -67,6 +67,16 @@ public class FindPartnerMessageHandler implements BotCommandHandler {
             }
             return;
         }
+        if (dt.isBefore(LocalDateTime.now())) {
+            try {
+                telegramClient.execute(SendMessage.builder().chatId(chatId)
+                        .text("Нельзя выбрать дату и время в прошлом. Укажите момент не раньше текущего.")
+                        .build());
+            } catch (TelegramApiException ex) {
+                throw new RuntimeException(ex);
+            }
+            return;
+        }
         state.dateTime = dt;
 
         List<User> partners = interviewService.findAvailablePartners(state.requesterUserId, state.language, dt);

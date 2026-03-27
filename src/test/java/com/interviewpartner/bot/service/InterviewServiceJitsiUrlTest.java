@@ -43,7 +43,7 @@ class InterviewServiceJitsiUrlTest {
                 Language.RUSSIAN,
                 null,
                 InterviewFormat.TECHNICAL,
-                LocalDateTime.of(2026, 6, 10, 14, 0),
+                futureAt(20, 14, 0),
                 60,
                 true
         );
@@ -64,7 +64,7 @@ class InterviewServiceJitsiUrlTest {
                 Language.RUSSIAN,
                 null,
                 InterviewFormat.TECHNICAL,
-                LocalDateTime.of(2026, 6, 11, 14, 0),
+                futureAt(21, 14, 0),
                 60,
                 true
         );
@@ -82,7 +82,7 @@ class InterviewServiceJitsiUrlTest {
                 .interviewer(owner)
                 .language(Language.RUSSIAN)
                 .format(InterviewFormat.TECHNICAL)
-                .dateTime(LocalDateTime.of(2026, 6, 12, 16, 0))
+                .dateTime(futureAt(22, 16, 0))
                 .duration(60)
                 .status(InterviewStatus.SCHEDULED)
                 .initiatorIsCandidate(false)
@@ -101,5 +101,9 @@ class InterviewServiceJitsiUrlTest {
                 .language(Language.RUSSIAN)
                 .level(Level.JUNIOR)
                 .build());
+    }
+
+    private static LocalDateTime futureAt(int daysFromNow, int hour, int minute) {
+        return LocalDateTime.now().plusDays(daysFromNow).withHour(hour).withMinute(minute).withSecond(0).withNano(0);
     }
 }

@@ -6,6 +6,7 @@ import com.interviewpartner.bot.exception.UserNotFoundException;
 import com.interviewpartner.bot.model.CandidateSlot;
 import com.interviewpartner.bot.model.Interview;
 import com.interviewpartner.bot.model.InterviewFormat;
+import com.interviewpartner.bot.model.InterviewRequest;
 import com.interviewpartner.bot.model.InterviewStatus;
 import com.interviewpartner.bot.model.Language;
 import com.interviewpartner.bot.model.Level;
@@ -81,6 +82,20 @@ public class CallbackQueryHandler implements BotCommandHandler {
         String safeData = data != null ? data : "";
 
         try {
+            if ("ci:slotpast".equals(safeData)) {
+                telegramClient.execute(AnswerCallbackQuery.builder()
+                        .callbackQueryId(callback.getId())
+                        .text("Прошедшие даты недоступны. Выберите сегодня или позже.")
+                        .build());
+                return;
+            }
+            if ("ci:timepast".equals(safeData)) {
+                telegramClient.execute(AnswerCallbackQuery.builder()
+                        .callbackQueryId(callback.getId())
+                        .text("Это время уже прошло. Выберите другое.")
+                        .build());
+                return;
+            }
             telegramClient.execute(AnswerCallbackQuery.builder()
                     .callbackQueryId(callback.getId())
                     .build());
@@ -160,7 +175,12 @@ public class CallbackQueryHandler implements BotCommandHandler {
             if (slots == null) slots = List.of();
             state.availableSlots = slots;
             state.step = CreateInterviewState.Step.VIEW_SLOT_DATES;
-            LocalDate firstSlotDate = slots.stream().map(s -> s.dateTime().toLocalDate()).min(LocalDate::compareTo).orElse(LocalDate.now());
+            LocalDate today = LocalDate.now();
+            LocalDate firstSlotDate = slots.stream()
+                    .map(s -> s.dateTime().toLocalDate())
+                    .min(LocalDate::compareTo)
+                    .map(d -> d.isBefore(today) ? today : d)
+                    .orElse(today);
             state.slotCalendarYear = firstSlotDate.getYear();
             state.slotCalendarMonth = firstSlotDate.getMonthValue();
             telegramClient.execute(SendMessage.builder()
@@ -187,7 +207,16 @@ public class CallbackQueryHandler implements BotCommandHandler {
         }
         if (data.startsWith("ci:slotdate:")) {
             String dateStr = data.substring("ci:slotdate:".length());
-            state.selectedSlotDate = LocalDate.parse(dateStr);
+            LocalDate picked = LocalDate.parse(dateStr);
+            if (picked.isBefore(LocalDate.now())) {
+                telegramClient.execute(SendMessage.builder()
+                        .chatId(chatId)
+                        .text("Нельзя выбрать дату в прошлом. Выберите сегодня или позже.")
+                        .replyMarkup(slotCalendarKeyboard(state.availableSlots != null ? state.availableSlots : List.of(), state.slotCalendarYear, state.slotCalendarMonth))
+                        .build());
+                return;
+            }
+            state.selectedSlotDate = picked;
             String dayLabel = state.selectedSlotDate.format(DATE_BTN) + " (" + DAY_NAMES_RU[state.selectedSlotDate.getDayOfWeek().getValue() - 1] + ")";
 
             Long myUserId = state.asCandidate ? state.candidateUserId : state.interviewerUserId;
@@ -212,7 +241,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
             telegramClient.execute(SendMessage.builder()
                     .chatId(chatId)
                     .text(dayLabel + (legend.length() > 0 ? legend.toString() : ""))
-                    .replyMarkup(createInterviewTimePickerKeyboard(state.selectedSlotDate, busyHours, availableHours))
+                    .replyMarkup(createInterviewTimePickerKeyboard(state.selectedSlotDate, busyHours, availableHours, LocalDateTime.now()))
                     .build());
             return;
         }
@@ -229,8 +258,24 @@ public class CallbackQueryHandler implements BotCommandHandler {
                 return;
             }
             if (hour < 0 || hour > 23) return;
+            LocalDateTime chosen = date.atTime(hour, 0);
+            if (chosen.isBefore(LocalDateTime.now())) {
+                Long myUserId = state.asCandidate ? state.candidateUserId : state.interviewerUserId;
+                Map<Integer, CalendarRoleType> busyHours = buildBusyHoursForDate(myUserId, date, state.asCandidate);
+                Set<Integer> availableHours = (state.availableSlots == null ? List.<AvailableSlotDto>of() : state.availableSlots)
+                        .stream()
+                        .filter(s -> s.dateTime().toLocalDate().equals(date))
+                        .map(s -> s.dateTime().getHour())
+                        .collect(java.util.stream.Collectors.toSet());
+                telegramClient.execute(SendMessage.builder()
+                        .chatId(chatId)
+                        .text("Это время уже прошло. Выберите другое.")
+                        .replyMarkup(createInterviewTimePickerKeyboard(date, busyHours, availableHours, LocalDateTime.now()))
+                        .build());
+                return;
+            }
             state.selectedSlotDate = date;
-            state.dateTime = date.atTime(hour, 0);
+            state.dateTime = chosen;
             state.durationMinutes = 60;
 
             // Автоматически назначаем партнёра из доступных слотов
@@ -314,6 +359,14 @@ public class CallbackQueryHandler implements BotCommandHandler {
             }
             if (state.availableSlots == null || index < 0 || index >= state.availableSlots.size()) return;
             AvailableSlotDto slot = state.availableSlots.get(index);
+            if (slot.dateTime().isBefore(LocalDateTime.now())) {
+                telegramClient.execute(SendMessage.builder()
+                        .chatId(chatId)
+                        .text("Этот слот уже в прошлом. Выберите другое время.")
+                        .replyMarkup(slotCalendarKeyboard(state.availableSlots, state.slotCalendarYear, state.slotCalendarMonth))
+                        .build());
+                return;
+            }
             state.dateTime = slot.dateTime();
             state.durationMinutes = 60;
             state.joinInterviewId = slot.interviewId();
@@ -436,6 +489,16 @@ public class CallbackQueryHandler implements BotCommandHandler {
                             .chatId(chatId)
                             .text("Введите новую дату и время в формате: yyyy-MM-dd HH:mm (например 2026-03-25 19:00)")
                             .build());
+                } catch (IllegalArgumentException e) {
+                    telegramClient.execute(SendMessage.builder().chatId(chatId)
+                            .text("Нельзя записаться на время в прошлом. Выберите другое время.").build());
+                    state.step = CreateInterviewState.Step.VIEW_SLOT_DATES;
+                    List<AvailableSlotDto> slots = state.availableSlots != null ? state.availableSlots : List.of();
+                    telegramClient.execute(SendMessage.builder()
+                            .chatId(chatId)
+                            .text("Выберите день в календаре:")
+                            .replyMarkup(slotCalendarKeyboard(slots, state.slotCalendarYear, state.slotCalendarMonth))
+                            .build());
                 } catch (UserNotFoundException e) {
                     telegramClient.execute(SendMessage.builder().chatId(chatId).text("Ошибка: пользователь не найден. Начните заново: /create_interview").build());
                     stateService.clearCreateInterview(chatId);
@@ -499,13 +562,16 @@ public class CallbackQueryHandler implements BotCommandHandler {
     private static InlineKeyboardMarkup slotCalendarKeyboard(List<AvailableSlotDto> slots, int year, int month) {
         if (slots == null) slots = List.of();
         Set<LocalDate> datesWithSlots = slots.stream().map(s -> s.dateTime().toLocalDate()).collect(Collectors.toSet());
+        LocalDate today = LocalDate.now();
         YearMonth ym = YearMonth.of(year, month);
+        YearMonth minYm = YearMonth.from(today);
         List<InlineKeyboardRow> rows = new ArrayList<>();
         String monthTitle = MONTH_NAMES_RU[month - 1] + " " + year;
         YearMonth prev = ym.minusMonths(1);
         YearMonth next = ym.plusMonths(1);
+        boolean canGoPrev = ym.isAfter(minYm);
         rows.add(new InlineKeyboardRow(
-                InlineKeyboardButton.builder().text("◀").callbackData("ci:slotcalnav:" + prev.getYear() + "-" + prev.getMonthValue()).build(),
+                InlineKeyboardButton.builder().text("◀").callbackData(canGoPrev ? "ci:slotcalnav:" + prev.getYear() + "-" + prev.getMonthValue() : "ci:slotpast").build(),
                 InlineKeyboardButton.builder().text(monthTitle).callbackData("ci:noop").build(),
                 InlineKeyboardButton.builder().text("▶").callbackData("ci:slotcalnav:" + next.getYear() + "-" + next.getMonthValue()).build()
         ));
@@ -526,9 +592,18 @@ public class CallbackQueryHandler implements BotCommandHandler {
         }
         for (int day = 1; day <= len; day++) {
             LocalDate date = ym.atDay(day);
+            boolean pastDay = date.isBefore(today);
             boolean hasSlots = datesWithSlots.contains(date);
-            String label = hasSlots ? day + " ✓" : String.valueOf(day);
-            week.add(InlineKeyboardButton.builder().text(label).callbackData("ci:slotdate:" + date).build());
+            String label;
+            if (pastDay) {
+                label = String.valueOf(day);
+            } else if (hasSlots) {
+                label = day + " ✓";
+            } else {
+                label = String.valueOf(day);
+            }
+            String dayCallback = pastDay ? "ci:slotpast" : "ci:slotdate:" + date;
+            week.add(InlineKeyboardButton.builder().text(label).callbackData(dayCallback).build());
             if (week.size() == 7) {
                 rows.add(new InlineKeyboardRow(week));
                 week = new ArrayList<>();
@@ -564,15 +639,20 @@ public class CallbackQueryHandler implements BotCommandHandler {
     private static final int TIME_PICKER_END_HOUR = 22;
 
     private static InlineKeyboardMarkup createInterviewTimePickerKeyboard(
-            LocalDate date, Map<Integer, CalendarRoleType> busyHours, Set<Integer> availableHours) {
+            LocalDate date, Map<Integer, CalendarRoleType> busyHours, Set<Integer> availableHours, LocalDateTime now) {
         List<InlineKeyboardRow> rows = new ArrayList<>();
         List<InlineKeyboardButton> row = new ArrayList<>();
         for (int hour = TIME_PICKER_START_HOUR; hour < TIME_PICKER_END_HOUR; hour++) {
+            LocalDateTime slotAt = date.atTime(hour, 0);
+            boolean past = slotAt.isBefore(now);
             CalendarRoleType busy = busyHours != null ? busyHours.get(hour) : null;
             String timeStr = LocalTime.of(hour, 0).format(TIME_LABEL);
             String label;
             String callback;
-            if (busy == CalendarRoleType.CANDIDATE) {
+            if (past) {
+                label = timeStr;
+                callback = "ci:timepast";
+            } else if (busy == CalendarRoleType.CANDIDATE) {
                 label = timeStr + " " + ROLE_CANDIDATE;
                 callback = "ci:noop";
             } else if (busy == CalendarRoleType.INTERVIEWER) {
@@ -680,14 +760,22 @@ public class CallbackQueryHandler implements BotCommandHandler {
                 return;
             }
 
-            var req = interviewRequestService.createRequest(
-                    state.requesterUserId,
-                    partnerUserId,
-                    state.language,
-                    InterviewFormat.TECHNICAL,
-                    state.dateTime,
-                    60
-            );
+            InterviewRequest req;
+            try {
+                req = interviewRequestService.createRequest(
+                        state.requesterUserId,
+                        partnerUserId,
+                        state.language,
+                        InterviewFormat.TECHNICAL,
+                        state.dateTime,
+                        60
+                );
+            } catch (IllegalArgumentException e) {
+                telegramClient.execute(SendMessage.builder().chatId(chatId)
+                        .text("Нельзя отправить запрос на время в прошлом. Выберите другое время.")
+                        .build());
+                return;
+            }
 
             User partner = userService.getUserById(partnerUserId);
             Long partnerChatId = partner.getTelegramId();
@@ -765,6 +853,11 @@ public class CallbackQueryHandler implements BotCommandHandler {
                         .build());
             } catch (InterviewConflictException e) {
                 telegramClient.execute(SendMessage.builder().chatId(chatId).text("Не могу принять: конфликт по времени.").build());
+                sendMainMenu(chatId, telegramClient);
+            } catch (IllegalArgumentException e) {
+                telegramClient.execute(SendMessage.builder().chatId(chatId)
+                        .text("Нельзя создать собеседование: указанное время уже в прошлом.")
+                        .build());
                 sendMainMenu(chatId, telegramClient);
             }
         }
