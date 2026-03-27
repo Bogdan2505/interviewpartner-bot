@@ -7,11 +7,12 @@ primary_region = "ams"
 
 [env]
   SPRING_PROFILES_ACTIVE = "prod"
+  TELEGRAM_BOT_WEBHOOK_BASE_URL = "https://interviewpartner-bot.fly.dev"
 
 [http_service]
   internal_port = 8080
   force_https = true
-  # Long polling: машина не должна засыпать от «тишины» HTTP.
+  # Webhook + health: без входящего HTTP Fly может остановить прокси; держим машину включённой.
   auto_stop_machines = false
   auto_start_machines = true
   min_machines_running = 1
