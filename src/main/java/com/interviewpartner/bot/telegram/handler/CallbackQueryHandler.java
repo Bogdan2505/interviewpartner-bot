@@ -150,6 +150,19 @@ public class CallbackQueryHandler implements BotCommandHandler {
             return;
         }
 
+        // Состояние в памяти: повтор «Записаться» сбрасывает сессию, а старые inline-кнопки всё ещё шлют ci:* без языка → в тексте (null) и падение на confirm.
+        // Две машины на Fly без sticky session дают тот же эффект.
+        if (!allowsCreateInterviewCallbackWithoutLanguage(data)
+                && (state.language == null || state.format == null)) {
+            telegramClient.execute(SendMessage.builder()
+                    .chatId(chatId)
+                    .text("Кнопка из старого сообщения или сессия на другом сервере. Нажмите «Записаться на собеседование» и пройдите шаги заново.")
+                    .replyMarkup(ChatMenuKeyboardBuilder.buildPersistentKeyboard())
+                    .build());
+            stateService.clearCreateInterview(chatId);
+            return;
+        }
+
         if (data.startsWith("ci:lang:")) {
             state.language = Language.valueOf(data.substring("ci:lang:".length()));
             state.format = InterviewFormat.TECHNICAL;
@@ -1917,6 +1930,14 @@ public class CallbackQueryHandler implements BotCommandHandler {
                 .text(text)
                 .replyMarkup(keyboard)
                 .build());
+    }
+
+    /** Callback до выбора языка/формата (или отмена). */
+    private static boolean allowsCreateInterviewCallbackWithoutLanguage(String data) {
+        if ("ci:cancel".equals(data) || "ci:noop".equals(data)) {
+            return true;
+        }
+        return data.startsWith("ci:lang:");
     }
 
     /**

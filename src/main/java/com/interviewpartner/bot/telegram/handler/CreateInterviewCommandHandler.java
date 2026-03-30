@@ -46,6 +46,8 @@ public class CreateInterviewCommandHandler implements BotCommandHandler {
         Long telegramId = from.getId();
         String username = from.getUserName() != null ? from.getUserName() : from.getFirstName();
         User user = userService.registerUser(telegramId, username != null ? username : "user");
+        // Сброс явный: иначе старые inline-сообщения в чате продолжают слать ci:* в «новую» сессию без языка.
+        stateService.clearCreateInterview(chatId);
         stateService.startCreateInterview(chatId, user.getId(), true);
         send(chatId, "Записаться на собеседование: выберите направление.", telegramClient, buildLanguageKeyboard());
     }
