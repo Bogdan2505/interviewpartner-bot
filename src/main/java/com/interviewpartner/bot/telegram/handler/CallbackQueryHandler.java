@@ -1,6 +1,7 @@
 package com.interviewpartner.bot.telegram.handler;
 
 import com.interviewpartner.bot.exception.InterviewConflictException;
+import com.interviewpartner.bot.exception.InterviewRequestForbiddenException;
 import com.interviewpartner.bot.exception.ScheduleOverlapException;
 import com.interviewpartner.bot.exception.UserNotFoundException;
 import com.interviewpartner.bot.model.CandidateSlot;
@@ -123,7 +124,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
                 return;
             }
             if (safeData.startsWith("ir:")) {
-                handleInterviewRequestCallback(chatId, safeData, telegramClient);
+                handleInterviewRequestCallback(chatId, safeData, callback.getFrom(), telegramClient);
                 return;
             }
             if (safeData.startsWith("cmd:")) {
@@ -813,8 +814,17 @@ public class CallbackQueryHandler implements BotCommandHandler {
         }
     }
 
-    private void handleInterviewRequestCallback(Long chatId, String data, TelegramClient telegramClient) throws TelegramApiException {
+    private void handleInterviewRequestCallback(
+            Long chatId,
+            String data,
+            org.telegram.telegrambots.meta.api.objects.User fromUser,
+            TelegramClient telegramClient) throws TelegramApiException {
         // ir:accept:<id> / ir:decline:<id>
+        if (fromUser == null) {
+            telegramClient.execute(SendMessage.builder().chatId(chatId).text("Не удалось определить пользователя.").build());
+            return;
+        }
+        long actorTelegramId = fromUser.getId();
         String[] parts = data.split(":", 3);
         if (parts.length != 3) {
             telegramClient.execute(SendMessage.builder().chatId(chatId).text("Некорректная заявка.").build());
@@ -830,19 +840,46 @@ public class CallbackQueryHandler implements BotCommandHandler {
         }
 
         if (action.equals("decline")) {
-            var req = interviewRequestService.decline(requestId, LocalDateTime.now());
-            telegramClient.execute(SendMessage.builder().chatId(chatId).text("Ок, отклонил.").build());
-            sendMainMenu(chatId, telegramClient);
-            User candidate = userService.getUserById(req.getCandidate().getId());
-            telegramClient.execute(SendMessage.builder()
-                    .chatId(candidate.getTelegramId())
-                    .text("Партнёр отклонил запрос на собеседование.")
-                    .replyMarkup(ChatMenuKeyboardBuilder.buildPersistentKeyboard())
-                    .build());
+            try {
+                var req = interviewRequestService.decline(requestId, actorTelegramId, LocalDateTime.now());
+                telegramClient.execute(SendMessage.builder().chatId(chatId).text("Ок, отклонил.").build());
+                sendMainMenu(chatId, telegramClient);
+                User candidate = userService.getUserById(req.getCandidate().getId());
+                telegramClient.execute(SendMessage.builder()
+                        .chatId(candidate.getTelegramId())
+                        .text("Партнёр отклонил запрос на собеседование.")
+                        .replyMarkup(ChatMenuKeyboardBuilder.buildPersistentKeyboard())
+                        .build());
+            } catch (InterviewRequestForbiddenException e) {
+                telegramClient.execute(SendMessage.builder().chatId(chatId)
+                        .text("Отклонить заявку может только приглашённый интервьюер.")
+                        .replyMarkup(ChatMenuKeyboardBuilder.buildPersistentKeyboard())
+                        .build());
+            } catch (IllegalArgumentException e) {
+                telegramClient.execute(SendMessage.builder().chatId(chatId)
+                        .text("Заявка не найдена или уже обработана.")
+                        .replyMarkup(ChatMenuKeyboardBuilder.buildPersistentKeyboard())
+                        .build());
+            }
             return;
         }
         if (action.equals("accept")) {
-            var req = interviewRequestService.accept(requestId, LocalDateTime.now());
+            InterviewRequest req;
+            try {
+                req = interviewRequestService.accept(requestId, actorTelegramId, LocalDateTime.now());
+            } catch (InterviewRequestForbiddenException e) {
+                telegramClient.execute(SendMessage.builder().chatId(chatId)
+                        .text("Принять заявку может только приглашённый интервьюер.")
+                        .replyMarkup(ChatMenuKeyboardBuilder.buildPersistentKeyboard())
+                        .build());
+                return;
+            } catch (IllegalArgumentException e) {
+                telegramClient.execute(SendMessage.builder().chatId(chatId)
+                        .text("Заявка не найдена или уже обработана.")
+                        .replyMarkup(ChatMenuKeyboardBuilder.buildPersistentKeyboard())
+                        .build());
+                return;
+            }
             try {
                 Interview created = interviewService.createInterview(
                         req.getCandidate().getId(),

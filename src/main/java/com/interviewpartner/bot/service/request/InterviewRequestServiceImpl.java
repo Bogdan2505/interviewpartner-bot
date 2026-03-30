@@ -1,5 +1,6 @@
 package com.interviewpartner.bot.service.request;
 
+import com.interviewpartner.bot.exception.InterviewRequestForbiddenException;
 import com.interviewpartner.bot.exception.UserNotFoundException;
 import com.interviewpartner.bot.model.InterviewFormat;
 import com.interviewpartner.bot.model.InterviewRequest;
@@ -13,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Objects;
 
 @Slf4j
 @Service
@@ -57,8 +59,8 @@ public class InterviewRequestServiceImpl implements InterviewRequestService {
     }
 
     @Override
-    public InterviewRequest accept(Long requestId, LocalDateTime now) {
-        var req = getPending(requestId);
+    public InterviewRequest accept(Long requestId, long interviewerTelegramId, LocalDateTime now) {
+        var req = getPendingForInterviewer(requestId, interviewerTelegramId);
         req.setStatus(InterviewRequestStatus.ACCEPTED);
         req.setRespondedAt(now);
         InterviewRequest saved = interviewRequestRepository.save(req);
@@ -67,8 +69,8 @@ public class InterviewRequestServiceImpl implements InterviewRequestService {
     }
 
     @Override
-    public InterviewRequest decline(Long requestId, LocalDateTime now) {
-        var req = getPending(requestId);
+    public InterviewRequest decline(Long requestId, long interviewerTelegramId, LocalDateTime now) {
+        var req = getPendingForInterviewer(requestId, interviewerTelegramId);
         req.setStatus(InterviewRequestStatus.DECLINED);
         req.setRespondedAt(now);
         InterviewRequest saved = interviewRequestRepository.save(req);
@@ -81,6 +83,16 @@ public class InterviewRequestServiceImpl implements InterviewRequestService {
     public InterviewRequest getPending(Long requestId) {
         return interviewRequestRepository.findByIdAndStatus(requestId, InterviewRequestStatus.PENDING)
                 .orElseThrow(() -> new IllegalArgumentException("Request not found or not pending: id=" + requestId));
+    }
+
+    private InterviewRequest getPendingForInterviewer(Long requestId, long interviewerTelegramId) {
+        var req = interviewRequestRepository.findByIdAndStatus(requestId, InterviewRequestStatus.PENDING)
+                .orElseThrow(() -> new IllegalArgumentException("Request not found or not pending: id=" + requestId));
+        Long expectedTg = req.getInterviewer() != null ? req.getInterviewer().getTelegramId() : null;
+        if (!Objects.equals(expectedTg, interviewerTelegramId)) {
+            throw new InterviewRequestForbiddenException();
+        }
+        return req;
     }
 }
 

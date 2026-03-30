@@ -15,9 +15,9 @@ public interface InterviewRequestService {
                                    LocalDateTime dateTime,
                                    int durationMinutes);
 
-    InterviewRequest accept(Long requestId, LocalDateTime now);
+    InterviewRequest accept(Long requestId, long interviewerTelegramId, LocalDateTime now);
 
-    InterviewRequest decline(Long requestId, LocalDateTime now);
+    InterviewRequest decline(Long requestId, long interviewerTelegramId, LocalDateTime now);
 
     InterviewRequest getPending(Long requestId);
 }

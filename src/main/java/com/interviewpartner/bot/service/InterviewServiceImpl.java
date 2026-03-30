@@ -344,7 +344,7 @@ public class InterviewServiceImpl implements InterviewService {
         String url = buildJitsiRoomUrl(interview.getId());
         interview.setVideoMeetingUrl(url);
         interviewRepository.save(interview);
-        log.info("Ссылка на видеовстречу (Jitsi Meet): interviewId={}, url={}", interview.getId(), url);
+        log.info("Ссылка на видеовстречу (Jitsi Meet) задана: interviewId={}", interview.getId());
     }
 
     private String buildJitsiRoomUrl(long interviewId) {

@@ -78,7 +78,7 @@ class InterviewRequestFlowTest {
                 .createdAt(LocalDateTime.of(2026, 3, 18, 12, 0))
                 .build();
 
-        when(interviewRequestService.accept(eq(10L), any())).thenReturn(req);
+        when(interviewRequestService.accept(eq(10L), eq(222L), any())).thenReturn(req);
 
         Interview createdInterview = mock(Interview.class);
         when(createdInterview.getId()).thenReturn(99L);
@@ -89,7 +89,7 @@ class InterviewRequestFlowTest {
                 .thenReturn(createdInterview);
         when(interviewService.getInterviewWithParticipants(99L)).thenReturn(createdInterview);
 
-        Update update = mockCallbackUpdate(222L, "ir:accept:10");
+        Update update = mockCallbackUpdate(222L, 222L, "ir:accept:10");
         handler.handle(update, telegramClient);
 
         verify(interviewService).createInterview(eq(1L), eq(2L), eq(Language.RUSSIAN), isNull(), eq(InterviewFormat.TECHNICAL), any(), eq(60), eq(true));
@@ -97,14 +97,17 @@ class InterviewRequestFlowTest {
         verify(telegramClient, org.mockito.Mockito.atLeastOnce()).execute(any(SendMessage.class));
     }
 
-    private static Update mockCallbackUpdate(Long chatId, String data) {
+    private static Update mockCallbackUpdate(Long chatId, Long fromTelegramUserId, String data) {
         Update update = mock(Update.class);
         CallbackQuery callback = mock(CallbackQuery.class);
         Message message = mock(Message.class);
+        org.telegram.telegrambots.meta.api.objects.User fromTg = mock(org.telegram.telegrambots.meta.api.objects.User.class);
+        when(fromTg.getId()).thenReturn(fromTelegramUserId);
         when(update.hasCallbackQuery()).thenReturn(true);
         when(update.getCallbackQuery()).thenReturn(callback);
         when(callback.getData()).thenReturn(data);
         when(callback.getId()).thenReturn("cb1");
+        when(callback.getFrom()).thenReturn(fromTg);
         when(callback.getMessage()).thenReturn(message);
         when(message.getChatId()).thenReturn(chatId);
         return update;
