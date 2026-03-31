@@ -44,6 +44,7 @@ public class NotificationDispatchService {
             createIfMissing(interview.getId(), ReminderType.HOURS_24, interview.getDateTime().minusHours(24), interview, now);
             createIfMissing(interview.getId(), ReminderType.HOURS_1, interview.getDateTime().minusHours(1), interview, now);
             createIfMissing(interview.getId(), ReminderType.MINUTES_15, interview.getDateTime().minusMinutes(15), interview, now);
+            createIfMissing(interview.getId(), ReminderType.START, interview.getDateTime(), interview, now);
         }
     }
 
@@ -78,6 +79,10 @@ public class NotificationDispatchService {
      */
     static boolean shouldSkipStaleReminder(Interview interview, ReminderType type, LocalDateTime now) {
         LocalDateTime start = interview.getDateTime();
+        if (type == ReminderType.START) {
+            // Шлём после наступления времени начала; не шлём «старт» с опозданием более 2 ч
+            return now.isBefore(start) || now.isAfter(start.plusHours(2));
+        }
         if (!start.isAfter(now)) {
             return true;
         }
@@ -86,6 +91,7 @@ public class NotificationDispatchService {
             case HOURS_24 -> until.toHours() < 20;
             case HOURS_1 -> until.toMinutes() < 45 || until.toHours() >= 2;
             case MINUTES_15 -> until.toMinutes() > 25 || until.toMinutes() < 2;
+            case START -> throw new IllegalStateException("START обрабатывается выше");
         };
     }
 

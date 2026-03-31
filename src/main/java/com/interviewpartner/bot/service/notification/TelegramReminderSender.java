@@ -40,6 +40,7 @@ public class TelegramReminderSender implements ReminderSender {
             case HOURS_24 -> "Напоминание: до собеседования 24 часа.";
             case HOURS_1 -> "Напоминание: до собеседования 1 час.";
             case MINUTES_15 -> "Напоминание: до собеседования 15 минут.";
+            case START -> "Собеседование начинается сейчас.";
         } + "\nДата/время: " + DT.format(interview.getDateTime());
         String joinUrl = resolveMeetingUrl(interview);
         if (joinUrl != null && !joinUrl.isBlank()) {
