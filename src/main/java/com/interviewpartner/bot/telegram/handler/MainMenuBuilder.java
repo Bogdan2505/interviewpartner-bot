@@ -43,7 +43,7 @@ public final class MainMenuBuilder {
                 .callbackData("cmd:schedule")
                 .build();
         var help = InlineKeyboardButton.builder()
-                .text("Помощь")
+                .text("Справка")
                 .callbackData("cmd:help")
                 .build();
 

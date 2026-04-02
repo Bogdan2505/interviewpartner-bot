@@ -16,7 +16,7 @@ public final class ChatMenuKeyboardBuilder {
     public static final String BTN_FIND_PARTNER = "Провести собеседование";
     /** Календарь уже запланированных интервью (кандидат/интервьюер). */
     public static final String BTN_SCHEDULE = "Расписание";
-    public static final String BTN_HELP = "Помощь";
+    public static final String BTN_HELP = "Справка";
 
     private ChatMenuKeyboardBuilder() {
     }

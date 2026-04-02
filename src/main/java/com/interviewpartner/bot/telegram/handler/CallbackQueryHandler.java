@@ -1368,16 +1368,9 @@ public class CallbackQueryHandler implements BotCommandHandler {
                 showScheduleFilterMenu(chatId, null, telegramClient);
             }
             case "cmd:help" -> {
-                String helpText = """
-                        Справка
-
-                        • Записаться на собеседование — вы кандидат, вам подберут интервьюера.
-                        • Провести собеседование — вы интервьюер, проводите встречу с кандидатом.
-                        • Расписание — календарь ваших запланированных собеседований по ролям.
-                        • Помощь — эта подсказка.""";
                 telegramClient.execute(SendMessage.builder()
                         .chatId(chatId)
-                        .text(helpText)
+                        .text(HelpCommandHandler.HELP_TEXT)
                         .replyMarkup(ChatMenuKeyboardBuilder.buildPersistentKeyboard())
                         .build());
             }

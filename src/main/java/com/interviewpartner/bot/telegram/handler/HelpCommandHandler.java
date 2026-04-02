@@ -12,13 +12,20 @@ import org.telegram.telegrambots.meta.generics.TelegramClient;
 public class HelpCommandHandler implements BotCommandHandler {
 
     private static final String CMD = "/help";
-    private static final String MESSAGE_RU = """
+
+    /** Текст справки: команда /help, кнопка «Справка» и callback cmd:help. */
+    public static final String HELP_TEXT = """
             Справка
 
             • Записаться на собеседование — вы кандидат, вам подберут интервьюера.
             • Провести собеседование — вы интервьюер, проводите встречу с кандидатом.
             • Расписание — календарь ваших запланированных собеседований по ролям.
-            • Помощь — эта подсказка.""";
+            • Справка — эта подсказка.
+
+            Как зайти на видеовстречу (Jitsi Meet):
+            1) Откройте ссылку из бота в браузере (удобнее Chrome или Яндекс.Браузер).
+            2) Если страница предложит войти через почту или аккаунт — войдите.
+            3) При входе нажмите вариант, что вы организатор, если интерфейс это спрашивает. Eсли партнёр этого не сделал — сделайте это вы, чтобы у обоих было нормальное подключение.""";
 
     @Override
     public boolean canHandle(Update update) {
@@ -34,7 +41,7 @@ public class HelpCommandHandler implements BotCommandHandler {
         try {
             telegramClient.execute(SendMessage.builder()
                     .chatId(update.getMessage().getChatId())
-                    .text(MESSAGE_RU)
+                    .text(HELP_TEXT)
                     .replyMarkup(ChatMenuKeyboardBuilder.buildPersistentKeyboard())
                     .build());
         } catch (TelegramApiException e) {
