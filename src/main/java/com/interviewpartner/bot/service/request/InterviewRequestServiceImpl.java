@@ -13,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.Objects;
 
@@ -24,6 +25,7 @@ public class InterviewRequestServiceImpl implements InterviewRequestService {
 
     private final InterviewRequestRepository interviewRequestRepository;
     private final UserRepository userRepository;
+    private final Clock clock;
 
     @Override
     public InterviewRequest createRequest(Long candidateUserId,
@@ -37,7 +39,7 @@ public class InterviewRequestServiceImpl implements InterviewRequestService {
         var interviewer = userRepository.findById(interviewerUserId)
                 .orElseThrow(() -> new UserNotFoundException("User with id=" + interviewerUserId + " not found"));
 
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(clock);
         if (dateTime.isBefore(now)) {
             throw new IllegalArgumentException("Interview request time must not be in the past");
         }
@@ -50,7 +52,7 @@ public class InterviewRequestServiceImpl implements InterviewRequestService {
                 .dateTime(dateTime)
                 .durationMinutes(durationMinutes)
                 .status(InterviewRequestStatus.PENDING)
-                .createdAt(LocalDateTime.now())
+                .createdAt(LocalDateTime.now(clock))
                 .respondedAt(null)
                 .build());
         log.info("Создан запрос на собеседование: requestId={}, candidateId={}, interviewerId={}, time={}",

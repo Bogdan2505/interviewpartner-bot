@@ -13,6 +13,7 @@ import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.meta.generics.TelegramClient;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -26,6 +27,7 @@ public class InterviewsCommandHandler implements BotCommandHandler {
 
     private final UserService userService;
     private final InterviewService interviewService;
+    private final Clock clock;
 
     @Override
     public boolean canHandle(Update update) {
@@ -48,7 +50,7 @@ public class InterviewsCommandHandler implements BotCommandHandler {
         User user = userService.registerUser(from.getId(), username != null ? username : "user");
 
         List<Interview> all = interviewService.getUserInterviews(user.getId(), null);
-        var now = LocalDateTime.now();
+        var now = LocalDateTime.now(clock);
         var upcoming = all.stream().filter(i -> i.getDateTime().isAfter(now) && i.getStatus() == InterviewStatus.SCHEDULED).toList();
         var past = all.stream().filter(i -> i.getDateTime().isBefore(now) || i.getStatus() != InterviewStatus.SCHEDULED).toList();
 

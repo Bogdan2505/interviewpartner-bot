@@ -14,6 +14,7 @@ import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.message.Message;
 import org.telegram.telegrambots.meta.generics.TelegramClient;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -46,7 +47,7 @@ class InterviewsCommandHandlerTest {
                         .build()
         ));
 
-        InterviewsCommandHandler handler = new InterviewsCommandHandler(userService, interviewService);
+        InterviewsCommandHandler handler = new InterviewsCommandHandler(userService, interviewService, Clock.systemUTC());
         Update update = mock(Update.class);
         Message message = mock(Message.class);
         org.telegram.telegrambots.meta.api.objects.User from = mock(org.telegram.telegrambots.meta.api.objects.User.class);

@@ -20,6 +20,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -44,13 +45,15 @@ public class InterviewServiceImpl implements InterviewService {
     private final CandidateSlotRepository candidateSlotRepository;
 
     private final String jitsiMeetBaseUrl;
+    private final Clock clock;
 
     public InterviewServiceImpl(
             InterviewRepository interviewRepository,
             UserRepository userRepository,
             ScheduleRepository scheduleRepository,
             CandidateSlotRepository candidateSlotRepository,
-            @Value("${video-meeting.jitsi-base-url:https://meet.jit.si}") String jitsiMeetBaseUrl
+            @Value("${video-meeting.jitsi-base-url:https://meet.jit.si}") String jitsiMeetBaseUrl,
+            Clock clock
     ) {
         this.interviewRepository = interviewRepository;
         this.userRepository = userRepository;
@@ -59,6 +62,7 @@ public class InterviewServiceImpl implements InterviewService {
         this.jitsiMeetBaseUrl = jitsiMeetBaseUrl.endsWith("/")
                 ? jitsiMeetBaseUrl.substring(0, jitsiMeetBaseUrl.length() - 1)
                 : jitsiMeetBaseUrl;
+        this.clock = clock;
     }
 
     @Override
@@ -77,7 +81,7 @@ public class InterviewServiceImpl implements InterviewService {
         var interviewer = userRepository.findById(interviewerId)
                 .orElseThrow(() -> new UserNotFoundException("User with id=" + interviewerId + " not found"));
 
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(clock);
         if (dateTime.isBefore(now)) {
             throw new IllegalArgumentException("Interview time must not be in the past");
         }
@@ -121,7 +125,7 @@ public class InterviewServiceImpl implements InterviewService {
     @Override
     @Transactional(readOnly = true)
     public List<AvailableSlotDto> getAvailableSlotsAsCandidate(Long candidateUserId, Language language, Level level, int daysAhead) {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(clock);
 
         List<Interview> soloInterviewerSlots = interviewRepository.findOpenSoloSlots(
                 language, candidateUserId, false, now);
@@ -146,7 +150,7 @@ public class InterviewServiceImpl implements InterviewService {
     @Override
     @Transactional(readOnly = true)
     public List<AvailableSlotDto> getAvailableSlotsAsInterviewer(Long interviewerUserId, Language language, Level level, int daysAhead) {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(clock);
 
         List<Interview> soloCandidateSlots = interviewRepository.findOpenSoloSlots(
                 language, interviewerUserId, true, now);

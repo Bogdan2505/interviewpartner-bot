@@ -17,6 +17,7 @@ import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.message.Message;
 import org.telegram.telegrambots.meta.generics.TelegramClient;
 
+import java.time.Clock;
 import java.util.Collections;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -57,7 +58,8 @@ class CreateInterviewFlowTest {
                 mock(com.interviewpartner.bot.service.ScheduleService.class),
                 candidateSlotService,
                 userService,
-                mock(InterviewRequestService.class)
+                mock(InterviewRequestService.class),
+                Clock.systemUTC()
         );
     }
 

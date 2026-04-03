@@ -20,6 +20,7 @@ import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.message.Message;
 import org.telegram.telegrambots.meta.generics.TelegramClient;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -58,7 +59,8 @@ class InterviewRequestFlowTest {
         when(userService.getUserById(2L)).thenReturn(partner);
 
         handler = new CallbackQueryHandler(stateService, interviewService, scheduleService,
-                mock(com.interviewpartner.bot.service.CandidateSlotService.class), userService, interviewRequestService);
+                mock(com.interviewpartner.bot.service.CandidateSlotService.class), userService, interviewRequestService,
+                Clock.systemUTC());
     }
 
     @Test

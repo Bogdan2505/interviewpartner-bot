@@ -15,6 +15,7 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKe
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.meta.generics.TelegramClient;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -33,6 +34,7 @@ public class CreateInterviewMessageHandler implements BotCommandHandler {
 
     private final ConversationStateService stateService;
     private final InterviewService interviewService;
+    private final Clock clock;
 
     @Override
     public boolean canHandle(Update update) {
@@ -64,11 +66,12 @@ public class CreateInterviewMessageHandler implements BotCommandHandler {
                 } catch (DateTimeParseException e) {
                     telegramClient.execute(SendMessage.builder()
                             .chatId(chatId)
-                            .text("Неверный формат. Введите дату и время как yyyy-MM-dd HH:mm (например 2026-03-25 19:00)")
+                            .text("Неверный формат. Введите дату и время как yyyy-MM-dd HH:mm (например 2026-03-25 19:00), часовой пояс: "
+                                    + clock.getZone().getId())
                             .build());
                     return;
                 }
-                if (dt.isBefore(LocalDateTime.now())) {
+                if (dt.isBefore(LocalDateTime.now(clock))) {
                     telegramClient.execute(SendMessage.builder()
                             .chatId(chatId)
                             .text("Нельзя выбрать дату и время в прошлом. Укажите момент не раньше текущего.")

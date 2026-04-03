@@ -11,26 +11,32 @@ import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.meta.generics.TelegramClient;
 
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashSet;
+import java.util.Locale;
 
 @Component
 @ConditionalOnExpression("environment.getProperty('telegram.bot.token') != null && !environment.getProperty('telegram.bot.token').isBlank()")
 public class TelegramReminderSender implements ReminderSender {
 
-    private static final DateTimeFormatter DT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+    private static final DateTimeFormatter DT =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm (VV)", Locale.ROOT);
 
     private final TelegramBotProperties botProperties;
     private final String jitsiMeetBaseUrl;
+    private final ZoneId applicationZoneId;
 
     public TelegramReminderSender(
             TelegramBotProperties botProperties,
-            @Value("${video-meeting.jitsi-base-url:https://meet.jit.si}") String jitsiMeetBaseUrl
+            @Value("${video-meeting.jitsi-base-url:https://meet.jit.si}") String jitsiMeetBaseUrl,
+            ZoneId applicationZoneId
     ) {
         this.botProperties = botProperties;
         this.jitsiMeetBaseUrl = jitsiMeetBaseUrl.endsWith("/")
                 ? jitsiMeetBaseUrl.substring(0, jitsiMeetBaseUrl.length() - 1)
                 : jitsiMeetBaseUrl;
+        this.applicationZoneId = applicationZoneId;
     }
 
     @Override
@@ -41,7 +47,7 @@ public class TelegramReminderSender implements ReminderSender {
             case HOURS_1 -> "Напоминание: до собеседования 1 час.";
             case MINUTES_15 -> "Напоминание: до собеседования 15 минут.";
             case START -> "Собеседование начинается сейчас.";
-        } + "\nДата/время: " + DT.format(interview.getDateTime());
+        } + "\nДата/время: " + interview.getDateTime().atZone(applicationZoneId).format(DT);
         String joinUrl = resolveMeetingUrl(interview);
         if (joinUrl != null && !joinUrl.isBlank()) {
             text += "\n\nСсылка на встречу (Jitsi Meet, хорошо работает в Chrome и Yandex):\n" + joinUrl;

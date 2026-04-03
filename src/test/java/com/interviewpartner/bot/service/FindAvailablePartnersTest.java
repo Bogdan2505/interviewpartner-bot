@@ -4,6 +4,7 @@ import com.interviewpartner.bot.model.InterviewFormat;
 import com.interviewpartner.bot.model.InterviewStatus;
 import com.interviewpartner.bot.model.Language;
 import com.interviewpartner.bot.model.Level;
+import com.interviewpartner.bot.config.ClockConfig;
 import com.interviewpartner.bot.model.User;
 import com.interviewpartner.bot.repository.InterviewRepository;
 import com.interviewpartner.bot.repository.UserRepository;
@@ -22,7 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @DataJpaTest
 @ActiveProfiles("test")
-@Import({InterviewServiceImpl.class, ScheduleServiceImpl.class, CandidateSlotServiceImpl.class})
+@Import({ClockConfig.class, InterviewServiceImpl.class, ScheduleServiceImpl.class, CandidateSlotServiceImpl.class})
 class FindAvailablePartnersTest {
 
     @Autowired

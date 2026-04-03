@@ -39,6 +39,7 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKe
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.meta.generics.TelegramClient;
 
+import java.time.Clock;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -68,6 +69,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
     private final CandidateSlotService candidateSlotService;
     private final UserService userService;
     private final InterviewRequestService interviewRequestService;
+    private final Clock clock;
 
     @Override
     public boolean canHandle(Update update) {
@@ -255,7 +257,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
             telegramClient.execute(SendMessage.builder()
                     .chatId(chatId)
                     .text(dayLabel + (legend.length() > 0 ? legend.toString() : ""))
-                    .replyMarkup(createInterviewTimePickerKeyboard(state.selectedSlotDate, busyHours, availableHours, LocalDateTime.now()))
+                    .replyMarkup(createInterviewTimePickerKeyboard(state.selectedSlotDate, busyHours, availableHours, LocalDateTime.now(clock)))
                     .build());
             return;
         }
@@ -273,7 +275,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
             }
             if (hour < 0 || hour > 23) return;
             LocalDateTime chosen = date.atTime(hour, 0);
-            if (chosen.isBefore(LocalDateTime.now())) {
+            if (chosen.isBefore(LocalDateTime.now(clock))) {
                 Long myUserId = state.asCandidate ? state.candidateUserId : state.interviewerUserId;
                 Map<Integer, CalendarRoleType> busyHours = buildBusyHoursForDate(myUserId, date, state.asCandidate);
                 Set<Integer> availableHours = (state.availableSlots == null ? List.<AvailableSlotDto>of() : state.availableSlots)
@@ -284,7 +286,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
                 telegramClient.execute(SendMessage.builder()
                         .chatId(chatId)
                         .text("Это время уже прошло. Выберите другое.")
-                        .replyMarkup(createInterviewTimePickerKeyboard(date, busyHours, availableHours, LocalDateTime.now()))
+                        .replyMarkup(createInterviewTimePickerKeyboard(date, busyHours, availableHours, LocalDateTime.now(clock)))
                         .build());
                 return;
             }
@@ -373,7 +375,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
             }
             if (state.availableSlots == null || index < 0 || index >= state.availableSlots.size()) return;
             AvailableSlotDto slot = state.availableSlots.get(index);
-            if (slot.dateTime().isBefore(LocalDateTime.now())) {
+            if (slot.dateTime().isBefore(LocalDateTime.now(clock))) {
                 telegramClient.execute(SendMessage.builder()
                         .chatId(chatId)
                         .text("Этот слот уже в прошлом. Выберите другое время.")
@@ -841,7 +843,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
 
         if (action.equals("decline")) {
             try {
-                var req = interviewRequestService.decline(requestId, actorTelegramId, LocalDateTime.now());
+                var req = interviewRequestService.decline(requestId, actorTelegramId, LocalDateTime.now(clock));
                 telegramClient.execute(SendMessage.builder().chatId(chatId).text("Ок, отклонил.").build());
                 sendMainMenu(chatId, telegramClient);
                 User candidate = userService.getUserById(req.getCandidate().getId());
@@ -866,7 +868,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
         if (action.equals("accept")) {
             InterviewRequest req;
             try {
-                req = interviewRequestService.accept(requestId, actorTelegramId, LocalDateTime.now());
+                req = interviewRequestService.accept(requestId, actorTelegramId, LocalDateTime.now(clock));
             } catch (InterviewRequestForbiddenException e) {
                 telegramClient.execute(SendMessage.builder().chatId(chatId)
                         .text("Принять заявку может только приглашённый интервьюер.")
@@ -1407,11 +1409,11 @@ public class CallbackQueryHandler implements BotCommandHandler {
 
     private String buildInterviewsText(Long userId) {
         List<Interview> all = interviewService.getUserInterviews(userId, null);
-        var now = LocalDateTime.now();
+        var now = LocalDateTime.now(clock);
         var upcoming = all.stream().filter(i -> i.getDateTime().isAfter(now) && i.getStatus() == InterviewStatus.SCHEDULED).toList();
         var past = all.stream().filter(i -> i.getDateTime().isBefore(now) || i.getStatus() != InterviewStatus.SCHEDULED).toList();
         StringBuilder sb = new StringBuilder();
-        sb.append("Ваши собеседования\n\n");
+        sb.append("Ваши собеседования\n(время — ").append(clock.getZone().getId()).append(")\n\n");
         sb.append("Предстоящие:\n");
         if (upcoming.isEmpty()) {
             sb.append("- нет\n");
