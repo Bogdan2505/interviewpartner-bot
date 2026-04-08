@@ -107,11 +107,11 @@ public class CreateInterviewMessageHandler implements BotCommandHandler {
                 }
                 state.durationMinutes = duration;
                 state.step = CreateInterviewState.Step.PARTNER;
-                Long myId = state.asCandidate ? state.candidateUserId : state.interviewerUserId;
+                Long myId = state.candidateUserId;
                 List<User> partners = interviewService.findAvailablePartners(myId, state.language, state.dateTime);
                 String partnerText = partners.isEmpty()
-                        ? "Нет доступных партнёров по выбранным параметрам. Создать слот без партнёра (партнёр подберётся позже)?"
-                        : "Выберите партнёра для собеседования:";
+                        ? "Нет доступных партнёров по выбранным параметрам. Создать открытый часовой слот без партнёра?"
+                        : "Выберите партнёра для взаимного часа:";
                 InlineKeyboardMarkup partnerKb = buildPartnerKeyboard(partners);
                 telegramClient.execute(SendMessage.builder()
                         .chatId(chatId)

@@ -49,7 +49,7 @@ public class AvailabilityCommandHandler implements BotCommandHandler {
             if (slots.isEmpty()) {
                 telegramClient.execute(SendMessage.builder()
                         .chatId(chatId)
-                        .text("Моя доступность как интервьюер: укажите направление.")
+                        .text("Окна доступности для взаимных часовых слотов: укажите направление.")
                         .replyMarkup(languageKeyboard())
                         .build());
             } else {
@@ -67,11 +67,11 @@ public class AvailabilityCommandHandler implements BotCommandHandler {
     }
 
     public static String renderSchedule(List<Schedule> slots, Language language) {
-        StringBuilder sb = new StringBuilder("Моя доступность как интервьюер");
+        StringBuilder sb = new StringBuilder("Мои окна доступности (взаимные слоты)");
         if (language != null) sb.append(" (").append(language).append(")");
         sb.append(":\n\n");
         if (slots.isEmpty()) {
-            sb.append("Слотов нет. Добавьте расписание — тогда кандидаты смогут вас найти.");
+            sb.append("Слотов нет. Добавьте окна — так проще подобрать время с другими участниками.");
         } else {
             for (Schedule s : slots) {
                 sb.append("• ").append(dayRu(s.getDayOfWeek()))

@@ -18,11 +18,11 @@ public final class CandidateSlotCommandHandler {
     }
 
     public static String renderSlots(List<CandidateSlot> slots, Language language) {
-        StringBuilder sb = new StringBuilder("Мои слоты для прохождения собеседования");
+        StringBuilder sb = new StringBuilder("Мои предпочтения по времени (для подбора взаимных слотов)");
         if (language != null) sb.append(" (").append(language).append(")");
         sb.append(":\n\n");
         if (slots.isEmpty()) {
-            sb.append("Слотов нет. Добавьте желаемое время — тогда система найдёт вам интервьюера.");
+            sb.append("Слотов нет. Добавьте удобные часы — так проще согласовать встречу.");
         } else {
             for (CandidateSlot s : slots) {
                 sb.append("• ").append(dayRu(s.getDayOfWeek()))

@@ -11,11 +11,9 @@ import java.util.List;
 
 public class CreateInterviewState {
     public Step step = Step.LANGUAGE;
-    /** true = я кандидат, false = я интервьюер. */
-    public boolean asCandidate = true;
-    /** Id кандидата (когда asCandidate: это я; иначе — выбранный партнёр). */
+    /** Текущий пользователь (кто проходит поток «Записаться»). */
     public Long candidateUserId;
-    /** Id интервьюера (когда asCandidate: выбранный партнёр; иначе — это я). */
+    /** Партнёр; до пары при создании открытого слота совпадает с candidateUserId. */
     public Long interviewerUserId;
     public Language language;
     /** Уровень для данного собеседования; null = «не важно». */
@@ -45,4 +43,3 @@ public class CreateInterviewState {
         CONFIRM
     }
 }
-

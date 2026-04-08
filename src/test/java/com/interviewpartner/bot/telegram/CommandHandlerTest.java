@@ -1,6 +1,7 @@
 package com.interviewpartner.bot.telegram;
 
 import com.interviewpartner.bot.telegram.handler.BotCommandHandler;
+import com.interviewpartner.bot.telegram.handler.ChatMenuKeyboardBuilder;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.telegram.telegrambots.meta.api.objects.Update;
@@ -65,19 +66,20 @@ class CommandHandlerTest {
     }
 
     @Test
-    void shouldRouteFindPartnerToFindPartnerHandler() {
-        BotCommandHandler findPartnerHandler = mock(BotCommandHandler.class);
-        whenCanHandle(findPartnerHandler, update -> {
+    void shouldRouteCreateInterviewButtonToHandler() {
+        BotCommandHandler createInterviewHandler = mock(BotCommandHandler.class);
+        whenCanHandle(createInterviewHandler, update -> {
             if (!update.hasMessage() || !update.getMessage().hasText()) return false;
-            return update.getMessage().getText().strip().startsWith("/find_partner");
+            return ChatMenuKeyboardBuilder.BTN_CREATE_INTERVIEW.equalsIgnoreCase(
+                    update.getMessage().getText().strip());
         });
 
-        CommandHandler handler = new CommandHandler(new ArrayList<>(List.of(findPartnerHandler, unknownHandler)));
+        CommandHandler handler = new CommandHandler(new ArrayList<>(List.of(createInterviewHandler, unknownHandler)));
         handler.init();
 
-        Update update = messageUpdate("/find_partner");
+        Update update = messageUpdate(ChatMenuKeyboardBuilder.BTN_CREATE_INTERVIEW);
         handler.handle(update, telegramClient);
-        verify(findPartnerHandler).handle(update, telegramClient);
+        verify(createInterviewHandler).handle(update, telegramClient);
     }
 
     private static Update messageUpdate(String text) {

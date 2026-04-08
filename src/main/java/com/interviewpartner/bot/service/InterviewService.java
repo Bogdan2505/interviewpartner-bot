@@ -26,22 +26,10 @@ public interface InterviewService {
     List<User> findAvailablePartners(Long userId, Language language, LocalDateTime dateTime);
 
     /**
-     * Слоты от других пользователей (solo-слоты интервьюеров), к которым можно присоединиться кандидатом.
+     * Слоты от других пользователей (открытые solo-слоты с initiatorIsCandidate=false), к которым можно присоединиться.
      * @param level если не null — фильтрует по уровню
      */
     List<AvailableSlotDto> getAvailableSlotsAsCandidate(Long candidateUserId, Language language, Level level, int daysAhead);
-
-    /**
-     * Слоты от других пользователей (solo-слоты кандидатов), к которым можно присоединиться интервьюером.
-     * @param level если не null — фильтрует по уровню
-     */
-    List<AvailableSlotDto> getAvailableSlotsAsInterviewer(Long interviewerUserId, Language language, Level level, int daysAhead);
-
-    /** Пытается автоматически создать собеседование для интервьюера с первым подходящим кандидатом. */
-    List<Interview> tryAutoMatchForInterviewer(Long interviewerUserId, Language language);
-
-    /** Пытается автоматически создать собеседование для кандидата с первым подходящим интервьюером. */
-    List<Interview> tryAutoMatchForCandidate(Long candidateUserId, Language language);
 
     /**
      * Присоединяет пользователя к существующему solo-слоту:

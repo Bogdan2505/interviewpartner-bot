@@ -46,9 +46,6 @@ class CreateInterviewFlowTest {
         InterviewService interviewService = mock(InterviewService.class);
         when(interviewService.findAvailablePartners(anyLong(), any(), any())).thenReturn(Collections.emptyList());
         when(interviewService.getAvailableSlotsAsCandidate(anyLong(), any(), any(), anyInt())).thenReturn(Collections.emptyList());
-        when(interviewService.getAvailableSlotsAsInterviewer(anyLong(), any(), any(), anyInt())).thenReturn(Collections.emptyList());
-        when(interviewService.tryAutoMatchForCandidate(anyLong(), any())).thenReturn(Collections.emptyList());
-        when(interviewService.tryAutoMatchForInterviewer(anyLong(), any())).thenReturn(Collections.emptyList());
         CandidateSlotService candidateSlotService = mock(CandidateSlotService.class);
         when(candidateSlotService.getUserSlots(anyLong())).thenReturn(Collections.emptyList());
         commandHandler = new CreateInterviewCommandHandler(stateService, userService);

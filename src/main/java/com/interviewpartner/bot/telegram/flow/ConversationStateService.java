@@ -14,27 +14,16 @@ import java.util.concurrent.ConcurrentHashMap;
 public class ConversationStateService {
 
     private final Map<Long, CreateInterviewState> createInterviewStates = new ConcurrentHashMap<>();
-    private final Map<Long, FindPartnerState> findPartnerStates = new ConcurrentHashMap<>();
     private final Map<Long, ScheduleState> scheduleStates = new ConcurrentHashMap<>();
     private final Map<Long, CandidateSlotState> candidateSlotStates = new ConcurrentHashMap<>();
     private final Map<Long, InterviewCalendarState> interviewCalendarStates = new ConcurrentHashMap<>();
 
-    /** Начать создание: как кандидат (true) или как интервьюер (false). */
-    public CreateInterviewState startCreateInterview(Long chatId, Long userId, boolean asCandidate) {
+    /** Поток «Записаться на собеседование» (взаимный час). */
+    public CreateInterviewState startCreateInterview(Long chatId, Long userId) {
         var state = new CreateInterviewState();
-        state.asCandidate = asCandidate;
-        if (asCandidate) {
-            state.candidateUserId = userId;
-        } else {
-            state.interviewerUserId = userId;
-        }
+        state.candidateUserId = userId;
         createInterviewStates.put(chatId, state);
         return state;
-    }
-
-    @Deprecated
-    public CreateInterviewState startCreateInterview(Long chatId, Long candidateUserId) {
-        return startCreateInterview(chatId, candidateUserId, true);
     }
 
     public Optional<CreateInterviewState> getCreateInterview(Long chatId) {
@@ -43,21 +32,6 @@ public class ConversationStateService {
 
     public void clearCreateInterview(Long chatId) {
         createInterviewStates.remove(chatId);
-    }
-
-    public FindPartnerState startFindPartner(Long chatId, Long requesterUserId) {
-        var state = new FindPartnerState();
-        state.requesterUserId = requesterUserId;
-        findPartnerStates.put(chatId, state);
-        return state;
-    }
-
-    public Optional<FindPartnerState> getFindPartner(Long chatId) {
-        return Optional.ofNullable(findPartnerStates.get(chatId));
-    }
-
-    public void clearFindPartner(Long chatId) {
-        findPartnerStates.remove(chatId);
     }
 
     public ScheduleState startSchedule(Long chatId, Long userId) {

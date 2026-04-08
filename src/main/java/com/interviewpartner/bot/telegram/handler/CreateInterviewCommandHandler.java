@@ -17,7 +17,7 @@ import org.telegram.telegrambots.meta.generics.TelegramClient;
 import java.util.List;
 
 /**
- * "Записаться на собеседование" — запускает ci: поток как кандидат (выбор языка → календарь → слоты).
+ * «Записаться на собеседование» — выбор языка → календарь → слоты (взаимный час).
  */
 @Order(20)
 @Component
@@ -48,8 +48,8 @@ public class CreateInterviewCommandHandler implements BotCommandHandler {
         User user = userService.registerUser(telegramId, username != null ? username : "user");
         // Сброс явный: иначе старые inline-сообщения в чате продолжают слать ci:* в «новую» сессию без языка.
         stateService.clearCreateInterview(chatId);
-        stateService.startCreateInterview(chatId, user.getId(), true);
-        send(chatId, "Записаться на собеседование: выберите направление.", telegramClient, buildLanguageKeyboard());
+        stateService.startCreateInterview(chatId, user.getId());
+        send(chatId, "Записаться на взаимный час: выберите направление.", telegramClient, buildLanguageKeyboard());
     }
 
     private static void send(Long chatId, String text, TelegramClient telegramClient, InlineKeyboardMarkup markup) {

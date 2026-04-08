@@ -44,11 +44,11 @@ public class TelegramReminderSender implements ReminderSender {
     public void sendReminder(Interview interview, ReminderType type) {
         TelegramClient client = new OkHttpTelegramClient(botProperties.getToken());
         String reminderText = switch (type) {
-            case HOURS_24 -> "Напоминание: до собеседования 24 часа.";
-            case HOURS_1 -> "Напоминание: до собеседования 1 час.";
-            case MINUTES_15 -> "Напоминание: до собеседования 15 минут.";
-            case START -> "Собеседование начинается сейчас.";
-        } + "\nДата/время: " + interview.getDateTime().atZone(applicationZoneId).format(DT);
+            case HOURS_24 -> "Напоминание: до встречи 24 часа.";
+            case HOURS_1 -> "Напоминание: до встречи 1 час.";
+            case MINUTES_15 -> "Напоминание: до встречи 15 минут.";
+            case START -> "Встреча начинается сейчас.";
+        } + "\nДата/время (старт часа): " + interview.getDateTime().atZone(applicationZoneId).format(DT);
         String joinUrl = resolveMeetingUrl(interview);
         User candidate = interview.getCandidate();
         User interviewer = interview.getInterviewer();
@@ -60,7 +60,13 @@ public class TelegramReminderSender implements ReminderSender {
 
             for (Long chatId : chatIds) {
                 User partner = chatId.equals(candidate.getTelegramId()) ? interviewer : candidate;
+                boolean viewerIsCandidate = chatId.equals(candidate.getTelegramId());
+                String mutualLine = "\nФормат: 60 мин, взаимная практика (~30 мин + ~30 мин)."
+                        + (viewerIsCandidate
+                        ? "\nПервая половина: вас собеседует " + formatUserLabel(interviewer) + ". Вторая: вы собеседуете партнёра."
+                        : "\nПервая половина: вы собеседуете " + formatUserLabel(candidate) + ". Вторая: партнёр собеседует вас.");
                 String text = reminderText
+                        + mutualLine
                         + "\nПартнёр: " + formatUserLabel(partner);
                 if (joinUrl != null && !joinUrl.isBlank()) {
                     text += "\n\nСсылка на встречу (Jitsi Meet, хорошо работает в Chrome и Yandex):\n" + joinUrl;

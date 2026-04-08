@@ -14,7 +14,7 @@ public final class MainMenuBuilder {
 
     private static final String WELCOME_RU = """
             Добро пожаловать в InterviewPartner Bot!
-            Здесь вы можете практиковать собеседования с другими участниками.
+            Здесь вы договариваетесь о взаимной практике: один час — две половины по ~30 минут, в первой половине роли «интервьюер / кандидат» заданы явно, во второй вы меняетесь.
             Выберите действие в меню ниже.""";
 
     private MainMenuBuilder() {
@@ -31,12 +31,8 @@ public final class MainMenuBuilder {
 
     public static InlineKeyboardMarkup buildMainMenuKeyboard() {
         var createInterview = InlineKeyboardButton.builder()
-                .text("создать собеседование (кандидат)")
+                .text("Записаться на собеседование")
                 .callbackData("cmd:create_interview")
-                .build();
-        var findPartner = InlineKeyboardButton.builder()
-                .text("Найти партнёра")
-                .callbackData("cmd:find_partner")
                 .build();
         var schedule = InlineKeyboardButton.builder()
                 .text("Расписание")
@@ -49,7 +45,6 @@ public final class MainMenuBuilder {
 
         List<InlineKeyboardRow> rows = List.of(
                 new InlineKeyboardRow(createInterview),
-                new InlineKeyboardRow(findPartner),
                 new InlineKeyboardRow(schedule),
                 new InlineKeyboardRow(help));
         return InlineKeyboardMarkup.builder().keyboard(rows).build();
