@@ -60,9 +60,13 @@ public final class CandidateSlotCommandHandler {
         return InlineKeyboardMarkup.builder().keyboard(List.of(
                 new InlineKeyboardRow(
                         InlineKeyboardButton.builder().text("Java").callbackData("cs:lang:JAVA").build(),
-                        InlineKeyboardButton.builder().text("Python").callbackData("cs:lang:PYTHON").build()),
+                        InlineKeyboardButton.builder().text("C#").callbackData("cs:lang:CSHARP").build()),
                 new InlineKeyboardRow(
+                        InlineKeyboardButton.builder().text("Python").callbackData("cs:lang:PYTHON").build(),
                         InlineKeyboardButton.builder().text("JavaScript").callbackData("cs:lang:JAVASCRIPT").build(),
+                        InlineKeyboardButton.builder().text("Kotlin").callbackData("cs:lang:KOTLIN").build()),
+                new InlineKeyboardRow(
+                        InlineKeyboardButton.builder().text("Swift").callbackData("cs:lang:SWIFT").build(),
                         InlineKeyboardButton.builder().text("Go").callbackData("cs:lang:GO").build()),
                 new InlineKeyboardRow(
                         InlineKeyboardButton.builder().text("QA").callbackData("cs:lang:QA").build(),

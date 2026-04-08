@@ -63,9 +63,13 @@ public class FindPartnerCommandHandler implements BotCommandHandler {
         return InlineKeyboardMarkup.builder().keyboard(List.of(
                 new InlineKeyboardRow(
                         InlineKeyboardButton.builder().text("Java").callbackData("ci:lang:JAVA").build(),
-                        InlineKeyboardButton.builder().text("Python").callbackData("ci:lang:PYTHON").build()),
+                        InlineKeyboardButton.builder().text("C#").callbackData("ci:lang:CSHARP").build()),
                 new InlineKeyboardRow(
+                        InlineKeyboardButton.builder().text("Python").callbackData("ci:lang:PYTHON").build(),
                         InlineKeyboardButton.builder().text("JavaScript").callbackData("ci:lang:JAVASCRIPT").build(),
+                        InlineKeyboardButton.builder().text("Kotlin").callbackData("ci:lang:KOTLIN").build()),
+                new InlineKeyboardRow(
+                        InlineKeyboardButton.builder().text("Swift").callbackData("ci:lang:SWIFT").build(),
                         InlineKeyboardButton.builder().text("Go").callbackData("ci:lang:GO").build()),
                 new InlineKeyboardRow(
                         InlineKeyboardButton.builder().text("QA").callbackData("ci:lang:QA").build(),

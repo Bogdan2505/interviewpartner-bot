@@ -614,7 +614,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
             if (pastDay) {
                 label = String.valueOf(day);
             } else if (hasSlots) {
-                label = day + " ✓";
+                label = day + "✓";
             } else {
                 label = String.valueOf(day);
             }
@@ -922,6 +922,9 @@ public class CallbackQueryHandler implements BotCommandHandler {
 
     private static final String ROLE_CANDIDATE = "🧑‍💻";
     private static final String ROLE_INTERVIEWER = "🧑‍🏫";
+    private static final String ROLE_CANDIDATE_CALENDAR = ROLE_CANDIDATE;
+    private static final String ROLE_INTERVIEWER_CALENDAR = ROLE_INTERVIEWER;
+    private static final String CALENDAR_LABEL_PAD = "\u00A0";
 
     /**
      * Возвращает Map<hour, role> для занятых слотов пользователя в указанный день.
@@ -1259,7 +1262,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
             LocalDate date = ym.atDay(day);
             EnumSet<CalendarRoleType> roles = rolesByDate.getOrDefault(date, EnumSet.noneOf(CalendarRoleType.class));
 
-            String label = buildDayLabelForCalendar(day, roles);
+            String label = buildDayLabelForCalendar(day, roles, filter);
             week.add(InlineKeyboardButton.builder().text(label).callbackData("ic:day:" + date).build());
             if (week.size() == 7) {
                 rows.add(new InlineKeyboardRow(week));
@@ -1272,21 +1275,33 @@ public class CallbackQueryHandler implements BotCommandHandler {
             rows.add(new InlineKeyboardRow(week));
         }
 
+        // Две отдельные кнопки внизу дают календарю больше доступной ширины на узких экранах.
         rows.add(new InlineKeyboardRow(
-                InlineKeyboardButton.builder().text("← К разделам").callbackData("ic:menu").build(),
+                InlineKeyboardButton.builder().text("← К разделам").callbackData("ic:menu").build()
+        ));
+        rows.add(new InlineKeyboardRow(
                 InlineKeyboardButton.builder().text("Закрыть").callbackData("ic:close").build()
         ));
 
         return InlineKeyboardMarkup.builder().keyboard(rows).build();
     }
 
-    private static String buildDayLabelForCalendar(int day, EnumSet<CalendarRoleType> roles) {
-        if (roles == null || roles.isEmpty()) return String.valueOf(day);
-        StringBuilder sb = new StringBuilder();
-        sb.append(day);
-        if (roles.contains(CalendarRoleType.CANDIDATE)) sb.append(" ").append(ROLE_CANDIDATE);
-        if (roles.contains(CalendarRoleType.INTERVIEWER)) sb.append(" ").append(ROLE_INTERVIEWER);
-        return sb.toString();
+    private static String buildDayLabelForCalendar(int day, EnumSet<CalendarRoleType> roles, InterviewCalendarState.ScheduleFilter filter) {
+        if (roles == null || roles.isEmpty()) return paddedCalendarLabel(String.valueOf(day));
+        // Для календаря используем максимально компактные иконки, чтобы не было "..."
+        // на двухзначных датах в узкой 7-колоночной сетке Telegram.
+        if (filter == InterviewCalendarState.ScheduleFilter.PENDING) {
+            if (roles.contains(CalendarRoleType.INTERVIEWER)) return paddedCalendarLabel(day + ROLE_INTERVIEWER_CALENDAR);
+            if (roles.contains(CalendarRoleType.CANDIDATE)) return paddedCalendarLabel(day + ROLE_CANDIDATE_CALENDAR);
+            return paddedCalendarLabel(String.valueOf(day));
+        }
+        if (roles.contains(CalendarRoleType.INTERVIEWER)) return paddedCalendarLabel(day + ROLE_INTERVIEWER_CALENDAR);
+        if (roles.contains(CalendarRoleType.CANDIDATE)) return paddedCalendarLabel(day + ROLE_CANDIDATE_CALENDAR);
+        return paddedCalendarLabel(String.valueOf(day));
+    }
+
+    private static String paddedCalendarLabel(String label) {
+        return CALENDAR_LABEL_PAD + label + CALENDAR_LABEL_PAD;
     }
 
     private InlineKeyboardMarkup timePickerKeyboard(LocalDate date, Map<Integer, EnumSet<CalendarRoleType>> hourRoles) {
@@ -1478,8 +1493,11 @@ public class CallbackQueryHandler implements BotCommandHandler {
 
     private static InlineKeyboardMarkup createInterviewLanguageKeyboard() {
         var java = InlineKeyboardButton.builder().text("Java").callbackData("ci:lang:JAVA").build();
+        var csharp = InlineKeyboardButton.builder().text("C#").callbackData("ci:lang:CSHARP").build();
         var python = InlineKeyboardButton.builder().text("Python").callbackData("ci:lang:PYTHON").build();
         var js = InlineKeyboardButton.builder().text("JavaScript").callbackData("ci:lang:JAVASCRIPT").build();
+        var kotlin = InlineKeyboardButton.builder().text("Kotlin").callbackData("ci:lang:KOTLIN").build();
+        var swift = InlineKeyboardButton.builder().text("Swift").callbackData("ci:lang:SWIFT").build();
         var go = InlineKeyboardButton.builder().text("Go").callbackData("ci:lang:GO").build();
         var qa = InlineKeyboardButton.builder().text("QA").callbackData("ci:lang:QA").build();
         var data = InlineKeyboardButton.builder().text("Data Analytics").callbackData("ci:lang:DATA_ANALYTICS").build();
@@ -1487,18 +1505,23 @@ public class CallbackQueryHandler implements BotCommandHandler {
         var sa = InlineKeyboardButton.builder().text("System Analysis").callbackData("ci:lang:SYSTEM_ANALYSIS").build();
         var cancel = InlineKeyboardButton.builder().text("Отмена").callbackData("ci:cancel").build();
         return InlineKeyboardMarkup.builder().keyboard(List.of(
-                new InlineKeyboardRow(java, python),
-                new InlineKeyboardRow(js, go),
-                new InlineKeyboardRow(qa, data),
-                new InlineKeyboardRow(ba, sa),
+                new InlineKeyboardRow(java, csharp),
+                new InlineKeyboardRow(python, js),
+                new InlineKeyboardRow(kotlin, swift),
+                new InlineKeyboardRow(go, qa),
+                new InlineKeyboardRow(data, ba),
+                new InlineKeyboardRow(sa),
                 new InlineKeyboardRow(cancel)
         )).build();
     }
 
     private static InlineKeyboardMarkup findPartnerLanguageKeyboard() {
         var java = InlineKeyboardButton.builder().text("Java").callbackData("fp:lang:JAVA").build();
+        var csharp = InlineKeyboardButton.builder().text("C#").callbackData("fp:lang:CSHARP").build();
         var python = InlineKeyboardButton.builder().text("Python").callbackData("fp:lang:PYTHON").build();
         var js = InlineKeyboardButton.builder().text("JavaScript").callbackData("fp:lang:JAVASCRIPT").build();
+        var kotlin = InlineKeyboardButton.builder().text("Kotlin").callbackData("fp:lang:KOTLIN").build();
+        var swift = InlineKeyboardButton.builder().text("Swift").callbackData("fp:lang:SWIFT").build();
         var go = InlineKeyboardButton.builder().text("Go").callbackData("fp:lang:GO").build();
         var qa = InlineKeyboardButton.builder().text("QA").callbackData("fp:lang:QA").build();
         var data = InlineKeyboardButton.builder().text("Data Analytics").callbackData("fp:lang:DATA_ANALYTICS").build();
@@ -1506,10 +1529,12 @@ public class CallbackQueryHandler implements BotCommandHandler {
         var sa = InlineKeyboardButton.builder().text("System Analysis").callbackData("fp:lang:SYSTEM_ANALYSIS").build();
         var cancel = InlineKeyboardButton.builder().text("Отмена").callbackData("fp:cancel").build();
         return InlineKeyboardMarkup.builder().keyboard(List.of(
-                new InlineKeyboardRow(java, python),
-                new InlineKeyboardRow(js, go),
-                new InlineKeyboardRow(qa, data),
-                new InlineKeyboardRow(ba, sa),
+                new InlineKeyboardRow(java, csharp),
+                new InlineKeyboardRow(python, js),
+                new InlineKeyboardRow(kotlin, swift),
+                new InlineKeyboardRow(go, qa),
+                new InlineKeyboardRow(data, ba),
+                new InlineKeyboardRow(sa),
                 new InlineKeyboardRow(cancel)
         )).build();
     }
@@ -1693,7 +1718,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
             LocalDate date = ym.atDay(day);
             DayOfWeek w = date.getDayOfWeek();
             boolean marked = daysWithSlots.contains(w) || selectedDays.contains(w);
-            String label = marked ? day + " ✓" : String.valueOf(day);
+            String label = marked ? day + "✓" : String.valueOf(day);
             week.add(InlineKeyboardButton.builder().text(label).callbackData("sc:calday:" + date).build());
             if (week.size() == 7) {
                 rows.add(new InlineKeyboardRow(week));
@@ -1887,7 +1912,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
             LocalDate date = ym.atDay(day);
             DayOfWeek w = date.getDayOfWeek();
             boolean marked = daysWithSlots.contains(w) || selectedDays.contains(w);
-            String label = marked ? day + " ✓" : String.valueOf(day);
+            String label = marked ? day + "✓" : String.valueOf(day);
             week.add(InlineKeyboardButton.builder().text(label).callbackData("cs:calday:" + date).build());
             if (week.size() == 7) {
                 rows.add(new InlineKeyboardRow(week));
