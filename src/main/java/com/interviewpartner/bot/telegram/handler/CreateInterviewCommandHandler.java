@@ -69,6 +69,7 @@ public class CreateInterviewCommandHandler implements BotCommandHandler {
                         InlineKeyboardButton.builder().text("C#").callbackData("ci:lang:CSHARP").build()),
                 new InlineKeyboardRow(
                         InlineKeyboardButton.builder().text("Python").callbackData("ci:lang:PYTHON").build(),
+                        InlineKeyboardButton.builder().text("Product Manager").callbackData("ci:lang:PRODUCT_MANAGER").build(),
                         InlineKeyboardButton.builder().text("JavaScript").callbackData("ci:lang:JAVASCRIPT").build()),
                 new InlineKeyboardRow(
                         InlineKeyboardButton.builder().text("Kotlin").callbackData("ci:lang:KOTLIN").build(),

@@ -112,6 +112,7 @@ public class AvailabilityCommandHandler implements BotCommandHandler {
                         InlineKeyboardButton.builder().text("C#").callbackData("sc:lang:CSHARP").build()),
                 new InlineKeyboardRow(
                         InlineKeyboardButton.builder().text("Python").callbackData("sc:lang:PYTHON").build(),
+                        InlineKeyboardButton.builder().text("Product Manager").callbackData("sc:lang:PRODUCT_MANAGER").build(),
                         InlineKeyboardButton.builder().text("JavaScript").callbackData("sc:lang:JAVASCRIPT").build(),
                         InlineKeyboardButton.builder().text("Kotlin").callbackData("sc:lang:KOTLIN").build()),
                 new InlineKeyboardRow(

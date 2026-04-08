@@ -4,6 +4,7 @@ public enum Language {
     JAVA,
     CSHARP,
     PYTHON,
+    PRODUCT_MANAGER,
     JAVASCRIPT,
     KOTLIN,
     SWIFT,
