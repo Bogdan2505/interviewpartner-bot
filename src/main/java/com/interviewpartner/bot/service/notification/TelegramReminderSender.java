@@ -3,6 +3,7 @@ package com.interviewpartner.bot.service.notification;
 import com.interviewpartner.bot.config.TelegramBotProperties;
 import com.interviewpartner.bot.model.Interview;
 import com.interviewpartner.bot.model.ReminderType;
+import com.interviewpartner.bot.model.User;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
@@ -42,23 +43,28 @@ public class TelegramReminderSender implements ReminderSender {
     @Override
     public void sendReminder(Interview interview, ReminderType type) {
         TelegramClient client = new OkHttpTelegramClient(botProperties.getToken());
-        String text = switch (type) {
+        String reminderText = switch (type) {
             case HOURS_24 -> "Напоминание: до собеседования 24 часа.";
             case HOURS_1 -> "Напоминание: до собеседования 1 час.";
             case MINUTES_15 -> "Напоминание: до собеседования 15 минут.";
             case START -> "Собеседование начинается сейчас.";
         } + "\nДата/время: " + interview.getDateTime().atZone(applicationZoneId).format(DT);
         String joinUrl = resolveMeetingUrl(interview);
-        if (joinUrl != null && !joinUrl.isBlank()) {
-            text += "\n\nСсылка на встречу (Jitsi Meet, хорошо работает в Chrome и Yandex):\n" + joinUrl;
-        }
-
-        LinkedHashSet<Long> chatIds = new LinkedHashSet<>();
-        chatIds.add(interview.getCandidate().getTelegramId());
-        chatIds.add(interview.getInterviewer().getTelegramId());
+        User candidate = interview.getCandidate();
+        User interviewer = interview.getInterviewer();
 
         try {
+            LinkedHashSet<Long> chatIds = new LinkedHashSet<>();
+            chatIds.add(candidate.getTelegramId());
+            chatIds.add(interviewer.getTelegramId());
+
             for (Long chatId : chatIds) {
+                User partner = chatId.equals(candidate.getTelegramId()) ? interviewer : candidate;
+                String text = reminderText
+                        + "\nПартнёр: " + formatUserLabel(partner);
+                if (joinUrl != null && !joinUrl.isBlank()) {
+                    text += "\n\nСсылка на встречу (Jitsi Meet, хорошо работает в Chrome и Yandex):\n" + joinUrl;
+                }
                 client.execute(SendMessage.builder()
                         .chatId(chatId)
                         .text(text)
@@ -67,6 +73,21 @@ public class TelegramReminderSender implements ReminderSender {
         } catch (TelegramApiException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    private static String formatUserLabel(User user) {
+        if (user == null) {
+            return "неизвестный пользователь";
+        }
+        String username = user.getUsername();
+        if (username != null && !username.isBlank()) {
+            return "@" + username;
+        }
+        if (user.getFirstName() != null && !user.getFirstName().isBlank()) {
+            return user.getFirstName();
+        }
+        Long id = user.getId();
+        return id != null ? "пользователь #" + id : "неизвестный пользователь";
     }
 
     /**
