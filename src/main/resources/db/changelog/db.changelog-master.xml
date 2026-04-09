@@ -53,4 +53,12 @@
                 stripComments="true"/>
     </changeSet>
 
+    <changeSet id="007-broadcast-announcements" author="interviewpartner">
+        <sqlFile
+                path="sql/007_broadcast_announcements.sql"
+                relativeToChangelogFile="true"
+                splitStatements="true"
+                stripComments="true"/>
+    </changeSet>
+
 </databaseChangeLog>
