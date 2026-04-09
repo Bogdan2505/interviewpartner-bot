@@ -1,9 +1,7 @@
 name: Fly Deploy
 
+# Деплой только вручную: Actions → Fly Deploy → Run workflow (пуш в main больше не триггерит).
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 jobs:
