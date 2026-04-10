@@ -103,7 +103,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
             }
             if (safeData.startsWith("ic:")) {
                 Integer messageId = callback.getMessage() != null ? callback.getMessage().getMessageId() : null;
-                handleInterviewCalendarCallback(chatId, messageId, safeData, telegramClient);
+                handleInterviewCalendarCallback(chatId, messageId, safeData, callback.getFrom(), telegramClient);
                 return;
             }
             if (safeData.startsWith("sc:")) {
@@ -450,15 +450,13 @@ public class CallbackQueryHandler implements BotCommandHandler {
                                         + "Партнёр (создатель слота): " + creatorLabel)
                                 .build());
 
-                        sendNotification(telegramClient, creator.getTelegramId(),
-                                "Новая заявка к вашему слоту.\n"
+                        telegramClient.execute(SendMessage.builder()
+                                .chatId(creator.getTelegramId())
+                                .text("Новая заявка к вашему слоту.\n"
                                         + "Старт: " + dtStr + "\n"
                                         + "Язык: " + state.language
                                         + levelInfo + "\n"
-                                        + "Партнёр: " + joinerLabel);
-                        telegramClient.execute(SendMessage.builder()
-                                .chatId(creator.getTelegramId())
-                                .text("Подтвердить заявку:")
+                                        + "Партнёр: " + joinerLabel)
                                 .replyMarkup(requestKeyboard(request.getId()))
                                 .build());
                     } else {
@@ -842,7 +840,8 @@ public class CallbackQueryHandler implements BotCommandHandler {
         List<InterviewRequest> requests = interviewRequestService.getUserRequests(userId, null);
         Map<Integer, CalendarRoleType> busy = new java.util.HashMap<>();
         for (InterviewRequest i : requests) {
-            if (i.getStatus() == InterviewRequestStatus.DECLINED) {
+            if (i.getStatus() == InterviewRequestStatus.DECLINED
+                    || i.getStatus() == InterviewRequestStatus.CANCELLED) {
                 continue;
             }
             if (i.getDateTime() == null || !i.getDateTime().toLocalDate().equals(date)) {
@@ -853,7 +852,11 @@ public class CallbackQueryHandler implements BotCommandHandler {
         return busy;
     }
 
-    private void handleInterviewCalendarCallback(Long chatId, Integer messageId, String data, TelegramClient telegramClient) throws TelegramApiException {
+    private void handleInterviewCalendarCallback(Long chatId,
+                                                 Integer messageId,
+                                                 String data,
+                                                 org.telegram.telegrambots.meta.api.objects.User fromUser,
+                                                 TelegramClient telegramClient) throws TelegramApiException {
         if (data.equals("ic:noop")) return;
 
         var state = stateService.getInterviewCalendar(chatId).orElse(null);
@@ -917,6 +920,51 @@ public class CallbackQueryHandler implements BotCommandHandler {
         if (data.equals("ic:back")) {
             state.selectedDate = null;
             showInterviewCalendarMonth(chatId, messageId, state, telegramClient);
+            return;
+        }
+
+        if (data.startsWith("ic:cancelreq:")) {
+            if (fromUser == null) {
+                telegramClient.execute(SendMessage.builder().chatId(chatId).text("Не удалось определить пользователя.").build());
+                return;
+            }
+            Long requestId;
+            try {
+                requestId = Long.parseLong(data.substring("ic:cancelreq:".length()));
+            } catch (NumberFormatException e) {
+                return;
+            }
+            try {
+                InterviewRequest before = interviewRequestService.getUserRequests(state.userId, null).stream()
+                        .filter(r -> requestId.equals(r.getId()))
+                        .findFirst()
+                        .orElseThrow(() -> new IllegalArgumentException("Request not found"));
+                User actor = userService.getUserByTelegramId(fromUser.getId());
+                InterviewRequest cancelled = interviewRequestService.cancel(requestId, fromUser.getId(), LocalDateTime.now(clock));
+                boolean wasAccepted = before.getStatus() == InterviewRequestStatus.ACCEPTED;
+                if (wasAccepted) {
+                    findScheduledInterviewByRequest(cancelled)
+                            .ifPresent(i -> interviewService.cancelInterview(i.getId()));
+                }
+                User partner = java.util.Objects.equals(before.getCandidate().getId(), actor.getId())
+                        ? before.getInterviewer()
+                        : before.getCandidate();
+                if (partner != null && partner.getTelegramId() != null) {
+                    String title = wasAccepted
+                            ? "Партнёр отменил согласованное собеседование."
+                            : "Партнёр отменил заявку на собеседование.";
+                    sendNotification(telegramClient, partner.getTelegramId(),
+                            title + "\n"
+                                    + "Дата/время: " + DT_FORMAT.format(before.getDateTime()) + "\n"
+                                    + "Язык: " + before.getLanguage());
+                }
+                telegramClient.execute(SendMessage.builder().chatId(chatId).text("Заявка отменена.").build());
+                showInterviewCalendarMonth(chatId, messageId, state, telegramClient);
+            } catch (InterviewRequestForbiddenException e) {
+                telegramClient.execute(SendMessage.builder().chatId(chatId).text("Отменить может только участник заявки.").build());
+            } catch (IllegalArgumentException e) {
+                telegramClient.execute(SendMessage.builder().chatId(chatId).text("Заявка уже закрыта или не найдена.").build());
+            }
             return;
         }
 
@@ -1024,7 +1072,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
                     }
                 }
                 text = sb.toString();
-                markup = timeBackKeyboard(day);
+                markup = timeDetailsKeyboard(day, bookedList);
             }
 
             if (messageId != null) {
@@ -1233,6 +1281,26 @@ public class CallbackQueryHandler implements BotCommandHandler {
                                 .build()
                 )
         )).build();
+    }
+
+    private InlineKeyboardMarkup timeDetailsKeyboard(LocalDate date, List<InterviewRequest> requests) {
+        List<InlineKeyboardRow> rows = new ArrayList<>();
+        for (InterviewRequest request : requests) {
+            if (request.getStatus() == InterviewRequestStatus.DECLINED
+                    || request.getStatus() == InterviewRequestStatus.CANCELLED) {
+                continue;
+            }
+            rows.add(new InlineKeyboardRow(
+                    InlineKeyboardButton.builder()
+                            .text("Отменить заявку #" + request.getId())
+                            .callbackData("ic:cancelreq:" + request.getId())
+                            .build()
+            ));
+        }
+        rows.add(new InlineKeyboardRow(
+                InlineKeyboardButton.builder().text("⬅️ К слотам").callbackData("ic:day:" + date).build()
+        ));
+        return InlineKeyboardMarkup.builder().keyboard(rows).build();
     }
 
     private void handleMainMenuCallback(Long chatId, String data, org.telegram.telegrambots.meta.api.objects.User fromTelegram, TelegramClient telegramClient) throws TelegramApiException {
@@ -1653,6 +1721,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
         LocalDateTime end = start.plusMinutes(durationMinutes);
         return interviewRequestService.getUserRequests(userId, null).stream()
                 .filter(r -> r.getStatus() != InterviewRequestStatus.DECLINED)
+                .filter(r -> r.getStatus() != InterviewRequestStatus.CANCELLED)
                 .filter(r -> excludeInterviewId == null || !excludeInterviewId.equals(r.getId()))
                 .anyMatch(r -> {
                     LocalDateTime iStart = r.getDateTime();
@@ -1690,6 +1759,22 @@ public class CallbackQueryHandler implements BotCommandHandler {
                 && request.getInterviewer().getId() != null
                 && request.getInterviewer().getId().equals(userId);
         return isInterviewer ? CalendarRoleType.INTERVIEWER : CalendarRoleType.CANDIDATE;
+    }
+
+    private java.util.Optional<Interview> findScheduledInterviewByRequest(InterviewRequest request) {
+        if (request == null || request.getCandidate() == null || request.getCandidate().getId() == null) {
+            return java.util.Optional.empty();
+        }
+        return interviewService.getUserInterviews(request.getCandidate().getId(), InterviewStatus.SCHEDULED).stream()
+                .filter(i -> i.getCandidate() != null && i.getInterviewer() != null)
+                .filter(i -> i.getCandidate().getId() != null && i.getInterviewer().getId() != null)
+                .filter(i -> i.getCandidate().getId().equals(request.getCandidate().getId()))
+                .filter(i -> i.getInterviewer().getId().equals(request.getInterviewer().getId()))
+                .filter(i -> i.getDateTime().equals(request.getDateTime()))
+                .filter(i -> i.getDuration().equals(request.getDurationMinutes()))
+                .filter(i -> i.getLanguage() == request.getLanguage())
+                .filter(i -> i.getFormat() == request.getFormat())
+                .findFirst();
     }
 
     /** Название раздела расписания для отображения пользователю. */
@@ -1753,7 +1838,9 @@ public class CallbackQueryHandler implements BotCommandHandler {
                     .chatId(telegramId)
                     .text(text)
                     .build());
-        } catch (TelegramApiException ignored) {
+        } catch (TelegramApiException e) {
+            org.slf4j.LoggerFactory.getLogger(CallbackQueryHandler.class)
+                    .warn("Не удалось отправить уведомление пользователю telegramId={}", telegramId, e);
         }
     }
 }

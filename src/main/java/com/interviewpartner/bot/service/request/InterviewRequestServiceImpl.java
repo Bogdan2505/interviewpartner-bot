@@ -121,6 +121,26 @@ public class InterviewRequestServiceImpl implements InterviewRequestService {
         return interviewRequestRepository.findOpenSoloRequests(language, excludeUserId, now);
     }
 
+    @Override
+    public InterviewRequest cancel(Long requestId, long actorTelegramId, LocalDateTime now) {
+        var req = interviewRequestRepository.findById(requestId)
+                .orElseThrow(() -> new IllegalArgumentException("Request not found: id=" + requestId));
+        Long candidateTg = req.getCandidate() != null ? req.getCandidate().getTelegramId() : null;
+        Long interviewerTg = req.getInterviewer() != null ? req.getInterviewer().getTelegramId() : null;
+        boolean allowed = Objects.equals(candidateTg, actorTelegramId) || Objects.equals(interviewerTg, actorTelegramId);
+        if (!allowed) {
+            throw new InterviewRequestForbiddenException();
+        }
+        if (req.getStatus() == InterviewRequestStatus.DECLINED || req.getStatus() == InterviewRequestStatus.CANCELLED) {
+            throw new IllegalArgumentException("Request already closed: id=" + requestId);
+        }
+        req.setStatus(InterviewRequestStatus.CANCELLED);
+        req.setRespondedAt(now);
+        InterviewRequest saved = interviewRequestRepository.save(req);
+        log.info("Запрос на собеседование отменён: requestId={}, actorTelegramId={}", requestId, actorTelegramId);
+        return saved;
+    }
+
     private InterviewRequest getPendingForInterviewer(Long requestId, long interviewerTelegramId) {
         var req = interviewRequestRepository.findByIdAndStatus(requestId, InterviewRequestStatus.PENDING)
                 .orElseThrow(() -> new IllegalArgumentException("Request not found or not pending: id=" + requestId));

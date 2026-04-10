@@ -25,5 +25,7 @@ public interface InterviewRequestService {
     List<InterviewRequest> getUserRequests(Long userId, InterviewRequestStatus status);
 
     List<InterviewRequest> getOpenSoloRequests(Language language, Long excludeUserId, LocalDateTime now);
+
+    InterviewRequest cancel(Long requestId, long actorTelegramId, LocalDateTime now);
 }
 
