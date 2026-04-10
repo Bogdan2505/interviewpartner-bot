@@ -2,6 +2,7 @@ package com.interviewpartner.bot.service;
 
 import com.interviewpartner.bot.exception.InterviewConflictException;
 import com.interviewpartner.bot.exception.UserNotFoundException;
+import com.interviewpartner.bot.model.Interview;
 import com.interviewpartner.bot.model.InterviewFormat;
 import com.interviewpartner.bot.model.InterviewStatus;
 import com.interviewpartner.bot.model.Language;
@@ -171,6 +172,35 @@ class InterviewServiceTest {
         assertThat(loaded.getId()).isEqualTo(created.getId());
         assertThat(loaded.getCandidate().getUsername()).isEqualTo("c310");
         assertThat(loaded.getInterviewer().getUsername()).isEqualTo("i311");
+    }
+
+    @Test
+    void getAvailableSlotsAsCandidate_shouldReturnMoreThanOldLimit() {
+        var seeker = createUser(7000L, "seeker");
+        LocalDateTime base = futureAt(3, 10, 0);
+
+        for (int i = 0; i < 30; i++) {
+            long telegramId = 8000L + i;
+            var owner = createUser(telegramId, "owner" + i);
+            Interview openSolo = Interview.builder()
+                    .candidate(owner)
+                    .interviewer(owner)
+                    .language(Language.RUSSIAN)
+                    .level(Level.JUNIOR)
+                    .format(InterviewFormat.TECHNICAL)
+                    .dateTime(base.plusHours(i))
+                    .duration(60)
+                    .status(InterviewStatus.SCHEDULED)
+                    .initiatorIsCandidate(false)
+                    .build();
+            interviewRepository.save(openSolo);
+        }
+        interviewRepository.flush();
+
+        var slots = interviewService.getAvailableSlotsAsCandidate(seeker.getId(), Language.RUSSIAN, null, 14);
+
+        assertThat(slots).hasSize(30);
+        assertThat(slots).allSatisfy(s -> assertThat(s.dateTime()).isAfter(LocalDateTime.now().minusMinutes(1)));
     }
 
     private User createUser(long telegramId, String username) {

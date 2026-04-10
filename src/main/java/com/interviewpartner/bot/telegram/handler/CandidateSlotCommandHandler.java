@@ -63,6 +63,7 @@ public final class CandidateSlotCommandHandler {
                         InlineKeyboardButton.builder().text("C#").callbackData("cs:lang:CSHARP").build()),
                 new InlineKeyboardRow(
                         InlineKeyboardButton.builder().text("Python").callbackData("cs:lang:PYTHON").build(),
+                        InlineKeyboardButton.builder().text("Algorithms").callbackData("cs:lang:ALGORITHMS").build(),
                         InlineKeyboardButton.builder().text("Product Manager").callbackData("cs:lang:PRODUCT_MANAGER").build(),
                         InlineKeyboardButton.builder().text("JavaScript").callbackData("cs:lang:JAVASCRIPT").build(),
                         InlineKeyboardButton.builder().text("Kotlin").callbackData("cs:lang:KOTLIN").build()),

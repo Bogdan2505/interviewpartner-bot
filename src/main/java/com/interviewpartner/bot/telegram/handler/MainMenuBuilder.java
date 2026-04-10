@@ -34,6 +34,10 @@ public final class MainMenuBuilder {
                 .text("Записаться на собеседование")
                 .callbackData("cmd:create_interview")
                 .build();
+        var availableSlots = InlineKeyboardButton.builder()
+                .text("Доступные слоты")
+                .callbackData("cmd:available_slots")
+                .build();
         var schedule = InlineKeyboardButton.builder()
                 .text("Расписание")
                 .callbackData("cmd:schedule")
@@ -45,6 +49,7 @@ public final class MainMenuBuilder {
 
         List<InlineKeyboardRow> rows = List.of(
                 new InlineKeyboardRow(createInterview),
+                new InlineKeyboardRow(availableSlots),
                 new InlineKeyboardRow(schedule),
                 new InlineKeyboardRow(help));
         return InlineKeyboardMarkup.builder().keyboard(rows).build();

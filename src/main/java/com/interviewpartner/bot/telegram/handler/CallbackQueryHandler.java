@@ -105,6 +105,10 @@ public class CallbackQueryHandler implements BotCommandHandler {
                 handleCreateInterviewCallback(chatId, safeData, telegramClient);
                 return;
             }
+            if (safeData.startsWith("as:")) {
+                handleAvailableSlotsCallback(chatId, safeData, telegramClient);
+                return;
+            }
             if (safeData.startsWith("ic:")) {
                 Integer messageId = callback.getMessage() != null ? callback.getMessage().getMessageId() : null;
                 handleInterviewCalendarCallback(chatId, messageId, safeData, telegramClient);
@@ -1278,6 +1282,15 @@ public class CallbackQueryHandler implements BotCommandHandler {
                         .replyMarkup(createInterviewLanguageKeyboard())
                         .build());
             }
+            case "cmd:available_slots" -> {
+                stateService.clearCreateInterview(chatId);
+                stateService.startCreateInterview(chatId, user.getId());
+                telegramClient.execute(SendMessage.builder()
+                        .chatId(chatId)
+                        .text("Доступные слоты: выберите направление.")
+                        .replyMarkup(availableSlotsLanguageKeyboard())
+                        .build());
+            }
             case "cmd:schedule" -> {
                 stateService.startInterviewCalendar(chatId, user.getId());
                 showScheduleFilterMenu(chatId, null, telegramClient);
@@ -1290,6 +1303,176 @@ public class CallbackQueryHandler implements BotCommandHandler {
                         .build());
             }
             default -> sendMainMenu(chatId, telegramClient);
+        }
+    }
+
+    private void handleAvailableSlotsCallback(Long chatId, String data, TelegramClient telegramClient) throws TelegramApiException {
+        if ("as:noop".equals(data)) return;
+        if ("as:pick_lang".equals(data)) {
+            telegramClient.execute(SendMessage.builder()
+                    .chatId(chatId)
+                    .text("Выберите направление.")
+                    .replyMarkup(availableSlotsLanguageKeyboard())
+                    .build());
+            return;
+        }
+        if ("as:cancel".equals(data)) {
+            stateService.clearCreateInterview(chatId);
+            telegramClient.execute(SendMessage.builder().chatId(chatId).text("Ок, закрыто.").build());
+            sendMainMenu(chatId, telegramClient);
+            return;
+        }
+
+        CreateInterviewState state = stateService.getCreateInterview(chatId).orElse(null);
+        if (state == null || state.candidateUserId == null) {
+            telegramClient.execute(SendMessage.builder()
+                    .chatId(chatId)
+                    .text("Сессия истекла. Нажмите «Доступные слоты» и выберите направление заново.")
+                    .replyMarkup(ChatMenuKeyboardBuilder.buildPersistentKeyboard())
+                    .build());
+            return;
+        }
+
+        if (data.startsWith("as:lang:")) {
+            state.language = Language.valueOf(data.substring("as:lang:".length()));
+            state.format = InterviewFormat.TECHNICAL;
+            state.level = null;
+            state.joinInterviewId = null;
+            state.interviewerUserId = null;
+            state.dateTime = null;
+            state.durationMinutes = null;
+            userService.updateUserLanguage(state.candidateUserId, state.language);
+
+            List<AvailableSlotDto> slots = interviewService.getAvailableSlotsAsCandidate(
+                    state.candidateUserId, state.language, null, 14).stream()
+                    .filter(s -> !s.dateTime().isBefore(LocalDateTime.now(clock)))
+                    .sorted(java.util.Comparator.comparing(AvailableSlotDto::dateTime))
+                    .toList();
+            state.availableSlots = slots;
+
+            if (slots.isEmpty()) {
+                telegramClient.execute(SendMessage.builder()
+                        .chatId(chatId)
+                        .text("По выбранному направлению пока нет доступных слотов от других участников.")
+                        .replyMarkup(availableSlotsLanguageKeyboard())
+                        .build());
+                return;
+            }
+
+            telegramClient.execute(SendMessage.builder()
+                    .chatId(chatId)
+                    .text(renderAvailableSlots(state.language, slots, clock.getZone().getId()))
+                    .replyMarkup(availableSlotsKeyboard(slots))
+                    .build());
+            return;
+        }
+
+        if (data.startsWith("as:slot:")) {
+            if (state.availableSlots == null || state.availableSlots.isEmpty()) {
+                telegramClient.execute(SendMessage.builder()
+                        .chatId(chatId)
+                        .text("Список слотов пуст. Выберите направление заново.")
+                        .replyMarkup(availableSlotsLanguageKeyboard())
+                        .build());
+                return;
+            }
+
+            int index;
+            try {
+                index = Integer.parseInt(data.substring("as:slot:".length()));
+            } catch (NumberFormatException e) {
+                return;
+            }
+            if (index < 0 || index >= state.availableSlots.size()) {
+                telegramClient.execute(SendMessage.builder()
+                        .chatId(chatId)
+                        .text("Слот не найден. Выберите из актуального списка.")
+                        .replyMarkup(availableSlotsKeyboard(state.availableSlots))
+                        .build());
+                return;
+            }
+
+            AvailableSlotDto slot = state.availableSlots.get(index);
+            if (slot.dateTime().isBefore(LocalDateTime.now(clock))) {
+                telegramClient.execute(SendMessage.builder()
+                        .chatId(chatId)
+                        .text("Этот слот уже в прошлом. Выберите другой.")
+                        .replyMarkup(availableSlotsKeyboard(state.availableSlots))
+                        .build());
+                return;
+            }
+
+            state.dateTime = slot.dateTime();
+            state.durationMinutes = 60;
+            state.joinInterviewId = slot.interviewId();
+            state.interviewerUserId = slot.partnerUserId();
+            state.step = CreateInterviewState.Step.CONFIRM;
+
+            String summary = "Подтвердить запись на встречу?\n"
+                    + "Язык: " + state.language + "\n"
+                    + "Уровень: " + levelLabel(slot.partnerLevel()) + "\n"
+                    + "Дата/время: " + DT_FORMAT.format(slot.dateTime()) + "\n"
+                    + "Партнёр: " + slot.partnerLabel();
+            telegramClient.execute(SendMessage.builder()
+                    .chatId(chatId)
+                    .text(summary)
+                    .replyMarkup(availableSlotsConfirmKeyboard())
+                    .build());
+            return;
+        }
+
+        if (data.startsWith("as:confirm:")) {
+            String action = data.substring("as:confirm:".length());
+            if ("no".equals(action)) {
+                if (state.availableSlots == null || state.availableSlots.isEmpty()) {
+                    telegramClient.execute(SendMessage.builder()
+                            .chatId(chatId)
+                            .text("Запись отменена.")
+                            .replyMarkup(availableSlotsLanguageKeyboard())
+                            .build());
+                    return;
+                }
+                telegramClient.execute(SendMessage.builder()
+                        .chatId(chatId)
+                        .text("Ок, не записываю. Выберите другой слот.")
+                        .replyMarkup(availableSlotsKeyboard(state.availableSlots))
+                        .build());
+                return;
+            }
+
+            if (!"yes".equals(action) || state.joinInterviewId == null || state.dateTime == null || state.durationMinutes == null) {
+                return;
+            }
+
+            if (hasScheduledConflictAtSameTime(state.candidateUserId, state.joinInterviewId, state.dateTime, state.durationMinutes)) {
+                telegramClient.execute(SendMessage.builder()
+                        .chatId(chatId)
+                        .text("На этот временной слот у вас уже есть согласованное собеседование. Выберите другое время.")
+                        .replyMarkup(availableSlotsKeyboard(state.availableSlots != null ? state.availableSlots : List.of()))
+                        .build());
+                return;
+            }
+
+            try {
+                Interview joined = interviewService.joinInterview(state.joinInterviewId, state.candidateUserId, true);
+                Interview withParticipants = interviewService.getInterviewWithParticipants(joined.getId());
+                String levelSuffix = joined.getLevel() != null ? " [" + levelLabel(joined.getLevel()) + "]" : "";
+                telegramClient.execute(SendMessage.builder()
+                        .chatId(chatId)
+                        .text("Вы записаны на встречу!\n"
+                                + "Дата/время: " + DT_FORMAT.format(joined.getDateTime()) + "\n"
+                                + "Язык: " + joined.getLanguage() + levelSuffix
+                                + videoMeetingBlock(withParticipants))
+                        .build());
+                stateService.clearCreateInterview(chatId);
+                sendMainMenu(chatId, telegramClient);
+            } catch (InterviewConflictException e) {
+                telegramClient.execute(SendMessage.builder()
+                        .chatId(chatId)
+                        .text("Этот слот уже занят или конфликтует по времени. Выберите другой.")
+                        .replyMarkup(availableSlotsKeyboard(state.availableSlots != null ? state.availableSlots : List.of()))
+                        .build());
+            }
         }
     }
 
@@ -1393,6 +1576,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
         var java = InlineKeyboardButton.builder().text("Java").callbackData("ci:lang:JAVA").build();
         var csharp = InlineKeyboardButton.builder().text("C#").callbackData("ci:lang:CSHARP").build();
         var python = InlineKeyboardButton.builder().text("Python").callbackData("ci:lang:PYTHON").build();
+        var algorithms = InlineKeyboardButton.builder().text("Algorithms").callbackData("ci:lang:ALGORITHMS").build();
         var productManager = InlineKeyboardButton.builder().text("Product Manager").callbackData("ci:lang:PRODUCT_MANAGER").build();
         var js = InlineKeyboardButton.builder().text("JavaScript").callbackData("ci:lang:JAVASCRIPT").build();
         var kotlin = InlineKeyboardButton.builder().text("Kotlin").callbackData("ci:lang:KOTLIN").build();
@@ -1405,13 +1589,114 @@ public class CallbackQueryHandler implements BotCommandHandler {
         var cancel = InlineKeyboardButton.builder().text("Отмена").callbackData("ci:cancel").build();
         return InlineKeyboardMarkup.builder().keyboard(List.of(
                 new InlineKeyboardRow(java, csharp),
-                new InlineKeyboardRow(python, productManager, js),
+                new InlineKeyboardRow(python, algorithms, productManager, js),
                 new InlineKeyboardRow(kotlin, swift),
                 new InlineKeyboardRow(go, qa),
                 new InlineKeyboardRow(data, ba),
                 new InlineKeyboardRow(sa),
                 new InlineKeyboardRow(cancel)
         )).build();
+    }
+
+    private static InlineKeyboardMarkup availableSlotsLanguageKeyboard() {
+        var java = InlineKeyboardButton.builder().text("Java").callbackData("as:lang:JAVA").build();
+        var csharp = InlineKeyboardButton.builder().text("C#").callbackData("as:lang:CSHARP").build();
+        var python = InlineKeyboardButton.builder().text("Python").callbackData("as:lang:PYTHON").build();
+        var algorithms = InlineKeyboardButton.builder().text("Algorithms").callbackData("as:lang:ALGORITHMS").build();
+        var productManager = InlineKeyboardButton.builder().text("Product Manager").callbackData("as:lang:PRODUCT_MANAGER").build();
+        var js = InlineKeyboardButton.builder().text("JavaScript").callbackData("as:lang:JAVASCRIPT").build();
+        var kotlin = InlineKeyboardButton.builder().text("Kotlin").callbackData("as:lang:KOTLIN").build();
+        var swift = InlineKeyboardButton.builder().text("Swift").callbackData("as:lang:SWIFT").build();
+        var go = InlineKeyboardButton.builder().text("Go").callbackData("as:lang:GO").build();
+        var qa = InlineKeyboardButton.builder().text("QA").callbackData("as:lang:QA").build();
+        var data = InlineKeyboardButton.builder().text("Data Analytics").callbackData("as:lang:DATA_ANALYTICS").build();
+        var ba = InlineKeyboardButton.builder().text("Business Analysis").callbackData("as:lang:BUSINESS_ANALYSIS").build();
+        var sa = InlineKeyboardButton.builder().text("System Analysis").callbackData("as:lang:SYSTEM_ANALYSIS").build();
+        var cancel = InlineKeyboardButton.builder().text("Отмена").callbackData("as:cancel").build();
+        return InlineKeyboardMarkup.builder().keyboard(List.of(
+                new InlineKeyboardRow(java, csharp),
+                new InlineKeyboardRow(python, algorithms, productManager, js),
+                new InlineKeyboardRow(kotlin, swift),
+                new InlineKeyboardRow(go, qa),
+                new InlineKeyboardRow(data, ba),
+                new InlineKeyboardRow(sa),
+                new InlineKeyboardRow(cancel)
+        )).build();
+    }
+
+    private static InlineKeyboardMarkup availableSlotsKeyboard(List<AvailableSlotDto> slots) {
+        List<InlineKeyboardRow> rows = new ArrayList<>();
+        for (int i = 0; i < slots.size(); i++) {
+            AvailableSlotDto slot = slots.get(i);
+            String label = slot.dateTime().format(DateTimeFormatter.ofPattern("dd.MM HH:mm"))
+                    + " • " + levelLabel(slot.partnerLevel());
+            rows.add(new InlineKeyboardRow(
+                    InlineKeyboardButton.builder()
+                            .text(label)
+                            .callbackData("as:slot:" + i)
+                            .build()
+            ));
+        }
+        rows.add(new InlineKeyboardRow(
+                InlineKeyboardButton.builder().text("Сменить направление").callbackData("as:pick_lang").build(),
+                InlineKeyboardButton.builder().text("Закрыть").callbackData("as:cancel").build()
+        ));
+        return InlineKeyboardMarkup.builder().keyboard(rows).build();
+    }
+
+    private static InlineKeyboardMarkup availableSlotsConfirmKeyboard() {
+        return InlineKeyboardMarkup.builder().keyboard(List.of(
+                new InlineKeyboardRow(
+                        InlineKeyboardButton.builder().text("Подтвердить запись").callbackData("as:confirm:yes").build(),
+                        InlineKeyboardButton.builder().text("Назад").callbackData("as:confirm:no").build()
+                )
+        )).build();
+    }
+
+    private static String renderAvailableSlots(Language language, List<AvailableSlotDto> slots, String zoneId) {
+        StringBuilder sb = new StringBuilder("Доступные слоты");
+        if (language != null) {
+            sb.append(" (").append(language).append(")");
+        }
+        sb.append(":\n");
+        sb.append("Часовой пояс: ").append(zoneId).append("\n\n");
+
+        appendLevelGroup(sb, slots, Level.JUNIOR);
+        appendLevelGroup(sb, slots, Level.MIDDLE);
+        appendLevelGroup(sb, slots, Level.SENIOR);
+        return sb.toString().trim();
+    }
+
+    private static void appendLevelGroup(StringBuilder sb, List<AvailableSlotDto> slots, Level level) {
+        sb.append(levelLabel(level)).append(":\n");
+        var grouped = slots.stream()
+                .filter(s -> level == s.partnerLevel())
+                .sorted(java.util.Comparator.comparing(AvailableSlotDto::dateTime))
+                .toList();
+        if (grouped.isEmpty()) {
+            sb.append("- нет\n\n");
+            return;
+        }
+        for (AvailableSlotDto slot : grouped) {
+            sb.append("- ")
+                    .append(slot.dateTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")))
+                    .append(" • ")
+                    .append(slot.partnerLabel())
+                    .append("\n");
+        }
+        sb.append("\n");
+    }
+
+    private boolean hasScheduledConflictAtSameTime(Long userId, Long excludeInterviewId, LocalDateTime start, int durationMinutes) {
+        if (userId == null || start == null) return false;
+        LocalDateTime end = start.plusMinutes(durationMinutes);
+        return interviewService.getUserInterviews(userId, InterviewStatus.SCHEDULED).stream()
+                .filter(i -> excludeInterviewId == null || !excludeInterviewId.equals(i.getId()))
+                .anyMatch(i -> {
+                    LocalDateTime iStart = i.getDateTime();
+                    LocalDateTime iEnd = iStart.plusMinutes(i.getDuration());
+                    return iStart.isBefore(end) && start.isBefore(iEnd);
+                });
     }
 
     private static InlineKeyboardMarkup scheduleMenuKeyboard() {

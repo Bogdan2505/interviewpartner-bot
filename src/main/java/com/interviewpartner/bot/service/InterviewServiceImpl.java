@@ -35,7 +35,6 @@ import java.util.TreeSet;
 public class InterviewServiceImpl implements InterviewService {
 
     private static final int SLOT_DURATION = 60;
-    private static final int MAX_SLOTS_RETURNED = 25;
 
     private final InterviewRepository interviewRepository;
     private final UserRepository userRepository;
@@ -135,7 +134,6 @@ public class InterviewServiceImpl implements InterviewService {
                 User interviewer = interview.getInterviewer();
                 String baseLabel = interviewer.getUsername() != null ? "@" + interviewer.getUsername() : "User " + interviewerId;
                 out.add(new AvailableSlotDto(interview.getDateTime(), interviewerId, baseLabel, interview.getId(), interview.getLevel()));
-                if (out.size() >= MAX_SLOTS_RETURNED) break;
             }
         }
 

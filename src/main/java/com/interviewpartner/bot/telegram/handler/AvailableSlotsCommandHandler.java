@@ -16,22 +16,21 @@ import org.telegram.telegrambots.meta.generics.TelegramClient;
 
 import java.util.List;
 
-/**
- * «Записаться на собеседование» — выбор языка → календарь → слоты (взаимный час).
- */
-@Order(20)
+@Order(21)
 @Component
 @RequiredArgsConstructor
-public class CreateInterviewCommandHandler implements BotCommandHandler {
+public class AvailableSlotsCommandHandler implements BotCommandHandler {
 
     private final ConversationStateService stateService;
     private final UserService userService;
 
     @Override
     public boolean canHandle(Update update) {
-        if (!update.hasMessage() || !update.getMessage().hasText()) return false;
+        if (!update.hasMessage() || !update.getMessage().hasText()) {
+            return false;
+        }
         String text = update.getMessage().getText().strip();
-        return text.equalsIgnoreCase(ChatMenuKeyboardBuilder.BTN_CREATE_INTERVIEW);
+        return text.equalsIgnoreCase(ChatMenuKeyboardBuilder.BTN_AVAILABLE_SLOTS);
     }
 
     @Override
@@ -43,13 +42,13 @@ public class CreateInterviewCommandHandler implements BotCommandHandler {
             send(chatId, "Ошибка: не удалось определить пользователя.", telegramClient, null);
             return;
         }
+
         Long telegramId = from.getId();
         String username = from.getUserName() != null ? from.getUserName() : from.getFirstName();
         User user = userService.registerUser(telegramId, username != null ? username : "user");
-        // Сброс явный: иначе старые inline-сообщения в чате продолжают слать ci:* в «новую» сессию без языка.
         stateService.clearCreateInterview(chatId);
         stateService.startCreateInterview(chatId, user.getId());
-        send(chatId, "Записаться на взаимный час: выберите направление.", telegramClient, buildLanguageKeyboard());
+        send(chatId, "Доступные слоты: выберите направление.", telegramClient, buildLanguageKeyboard());
     }
 
     private static void send(Long chatId, String text, TelegramClient telegramClient, InlineKeyboardMarkup markup) {
@@ -65,25 +64,25 @@ public class CreateInterviewCommandHandler implements BotCommandHandler {
     private static InlineKeyboardMarkup buildLanguageKeyboard() {
         return InlineKeyboardMarkup.builder().keyboard(List.of(
                 new InlineKeyboardRow(
-                        InlineKeyboardButton.builder().text("Java").callbackData("ci:lang:JAVA").build(),
-                        InlineKeyboardButton.builder().text("C#").callbackData("ci:lang:CSHARP").build()),
+                        InlineKeyboardButton.builder().text("Java").callbackData("as:lang:JAVA").build(),
+                        InlineKeyboardButton.builder().text("C#").callbackData("as:lang:CSHARP").build()),
                 new InlineKeyboardRow(
-                        InlineKeyboardButton.builder().text("Python").callbackData("ci:lang:PYTHON").build(),
-                        InlineKeyboardButton.builder().text("Algorithms").callbackData("ci:lang:ALGORITHMS").build(),
-                        InlineKeyboardButton.builder().text("Product Manager").callbackData("ci:lang:PRODUCT_MANAGER").build(),
-                        InlineKeyboardButton.builder().text("JavaScript").callbackData("ci:lang:JAVASCRIPT").build()),
+                        InlineKeyboardButton.builder().text("Python").callbackData("as:lang:PYTHON").build(),
+                        InlineKeyboardButton.builder().text("Algorithms").callbackData("as:lang:ALGORITHMS").build(),
+                        InlineKeyboardButton.builder().text("Product Manager").callbackData("as:lang:PRODUCT_MANAGER").build(),
+                        InlineKeyboardButton.builder().text("JavaScript").callbackData("as:lang:JAVASCRIPT").build()),
                 new InlineKeyboardRow(
-                        InlineKeyboardButton.builder().text("Kotlin").callbackData("ci:lang:KOTLIN").build(),
-                        InlineKeyboardButton.builder().text("Swift").callbackData("ci:lang:SWIFT").build()),
+                        InlineKeyboardButton.builder().text("Kotlin").callbackData("as:lang:KOTLIN").build(),
+                        InlineKeyboardButton.builder().text("Swift").callbackData("as:lang:SWIFT").build()),
                 new InlineKeyboardRow(
-                        InlineKeyboardButton.builder().text("Go").callbackData("ci:lang:GO").build(),
-                        InlineKeyboardButton.builder().text("QA").callbackData("ci:lang:QA").build(),
-                        InlineKeyboardButton.builder().text("Data Analytics").callbackData("ci:lang:DATA_ANALYTICS").build()),
+                        InlineKeyboardButton.builder().text("Go").callbackData("as:lang:GO").build(),
+                        InlineKeyboardButton.builder().text("QA").callbackData("as:lang:QA").build(),
+                        InlineKeyboardButton.builder().text("Data Analytics").callbackData("as:lang:DATA_ANALYTICS").build()),
                 new InlineKeyboardRow(
-                        InlineKeyboardButton.builder().text("Business Analysis").callbackData("ci:lang:BUSINESS_ANALYSIS").build(),
-                        InlineKeyboardButton.builder().text("System Analysis").callbackData("ci:lang:SYSTEM_ANALYSIS").build()),
+                        InlineKeyboardButton.builder().text("Business Analysis").callbackData("as:lang:BUSINESS_ANALYSIS").build(),
+                        InlineKeyboardButton.builder().text("System Analysis").callbackData("as:lang:SYSTEM_ANALYSIS").build()),
                 new InlineKeyboardRow(
-                        InlineKeyboardButton.builder().text("Отмена").callbackData("ci:cancel").build())
+                        InlineKeyboardButton.builder().text("Отмена").callbackData("as:cancel").build())
         )).build();
     }
 }

@@ -12,6 +12,8 @@ public final class ChatMenuKeyboardBuilder {
 
     /** Запись на взаимный часовой слот (календарь и открытые окна). */
     public static final String BTN_CREATE_INTERVIEW = "Записаться на собеседование";
+    /** Просмотр открытых слотов и запись через список. */
+    public static final String BTN_AVAILABLE_SLOTS = "Доступные слоты";
     /** Запланированные встречи. */
     public static final String BTN_SCHEDULE = "Расписание";
     public static final String BTN_HELP = "Справка";
@@ -24,6 +26,7 @@ public final class ChatMenuKeyboardBuilder {
         if (text == null || text.isBlank()) return false;
         String t = text.strip();
         return BTN_CREATE_INTERVIEW.equals(t)
+                || BTN_AVAILABLE_SLOTS.equals(t)
                 || BTN_SCHEDULE.equals(t)
                 || BTN_HELP.equals(t);
     }
@@ -31,6 +34,7 @@ public final class ChatMenuKeyboardBuilder {
     public static ReplyKeyboardMarkup buildPersistentKeyboard() {
         KeyboardRow row1 = new KeyboardRow();
         row1.add(BTN_CREATE_INTERVIEW);
+        row1.add(BTN_AVAILABLE_SLOTS);
 
         KeyboardRow row2 = new KeyboardRow();
         row2.add(BTN_SCHEDULE);
