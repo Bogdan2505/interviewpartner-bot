@@ -21,7 +21,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @DataJpaTest
 @ActiveProfiles("test")
-@Import({ClockConfig.class, InterviewServiceImpl.class, UserServiceImpl.class, CandidateSlotServiceImpl.class})
+@Import({ClockConfig.class, InterviewServiceImpl.class, UserServiceImpl.class})
 class InterviewServiceJitsiUrlTest {
 
     @Autowired

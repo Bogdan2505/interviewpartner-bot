@@ -6,6 +6,7 @@ import com.interviewpartner.bot.model.InterviewRequestStatus;
 import com.interviewpartner.bot.model.Language;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 public interface InterviewRequestService {
     InterviewRequest createRequest(Long candidateUserId,
@@ -20,5 +21,9 @@ public interface InterviewRequestService {
     InterviewRequest decline(Long requestId, long interviewerTelegramId, LocalDateTime now);
 
     InterviewRequest getPending(Long requestId);
+
+    List<InterviewRequest> getUserRequests(Long userId, InterviewRequestStatus status);
+
+    List<InterviewRequest> getOpenSoloRequests(Language language, Long excludeUserId, LocalDateTime now);
 }
 

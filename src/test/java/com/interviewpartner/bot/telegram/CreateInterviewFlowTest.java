@@ -7,7 +7,6 @@ import com.interviewpartner.bot.model.InterviewStatus;
 import com.interviewpartner.bot.model.Language;
 import com.interviewpartner.bot.model.Level;
 import com.interviewpartner.bot.service.dto.AvailableSlotDto;
-import com.interviewpartner.bot.service.CandidateSlotService;
 import com.interviewpartner.bot.service.InterviewService;
 import com.interviewpartner.bot.service.UserService;
 import com.interviewpartner.bot.service.request.InterviewRequestService;
@@ -58,14 +57,10 @@ class CreateInterviewFlowTest {
         interviewService = mock(InterviewService.class);
         when(interviewService.findAvailablePartners(anyLong(), any(), any())).thenReturn(Collections.emptyList());
         when(interviewService.getAvailableSlotsAsCandidate(anyLong(), any(), any(), anyInt())).thenReturn(Collections.emptyList());
-        CandidateSlotService candidateSlotService = mock(CandidateSlotService.class);
-        when(candidateSlotService.getUserSlots(anyLong())).thenReturn(Collections.emptyList());
         commandHandler = new CreateInterviewCommandHandler(stateService, userService);
         callbackQueryHandler = new CallbackQueryHandler(
                 stateService,
                 interviewService,
-                mock(com.interviewpartner.bot.service.ScheduleService.class),
-                candidateSlotService,
                 userService,
                 mock(InterviewRequestService.class),
                 Clock.systemUTC()
@@ -80,7 +75,7 @@ class CreateInterviewFlowTest {
     }
 
     @Test
-    void candidateSlotLangCallback_shouldShowSlotMenu() throws Exception {
+    void candidateSlotLangCallback_shouldShowDisabledMessage() throws Exception {
         Update start = mockMessageUpdate(1L, "Записаться на собеседование");
         commandHandler.handle(start, telegramClient);
 

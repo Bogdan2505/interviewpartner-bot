@@ -14,8 +14,6 @@ import java.util.concurrent.ConcurrentHashMap;
 public class ConversationStateService {
 
     private final Map<Long, CreateInterviewState> createInterviewStates = new ConcurrentHashMap<>();
-    private final Map<Long, ScheduleState> scheduleStates = new ConcurrentHashMap<>();
-    private final Map<Long, CandidateSlotState> candidateSlotStates = new ConcurrentHashMap<>();
     private final Map<Long, InterviewCalendarState> interviewCalendarStates = new ConcurrentHashMap<>();
 
     /** Поток «Записаться на собеседование» (взаимный час). */
@@ -32,36 +30,6 @@ public class ConversationStateService {
 
     public void clearCreateInterview(Long chatId) {
         createInterviewStates.remove(chatId);
-    }
-
-    public ScheduleState startSchedule(Long chatId, Long userId) {
-        var state = new ScheduleState();
-        state.userId = userId;
-        scheduleStates.put(chatId, state);
-        return state;
-    }
-
-    public Optional<ScheduleState> getSchedule(Long chatId) {
-        return Optional.ofNullable(scheduleStates.get(chatId));
-    }
-
-    public void clearSchedule(Long chatId) {
-        scheduleStates.remove(chatId);
-    }
-
-    public CandidateSlotState startCandidateSlot(Long chatId, Long userId) {
-        var state = new CandidateSlotState();
-        state.userId = userId;
-        candidateSlotStates.put(chatId, state);
-        return state;
-    }
-
-    public Optional<CandidateSlotState> getCandidateSlot(Long chatId) {
-        return Optional.ofNullable(candidateSlotStates.get(chatId));
-    }
-
-    public void clearCandidateSlot(Long chatId) {
-        candidateSlotStates.remove(chatId);
     }
 
     public InterviewCalendarState startInterviewCalendar(Long chatId, Long userId) {

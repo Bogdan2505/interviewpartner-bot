@@ -2,32 +2,26 @@ package com.interviewpartner.bot.service;
 
 import com.interviewpartner.bot.exception.InterviewConflictException;
 import com.interviewpartner.bot.exception.UserNotFoundException;
-import com.interviewpartner.bot.model.CandidateSlot;
 import com.interviewpartner.bot.model.Interview;
 import com.interviewpartner.bot.model.InterviewFormat;
 import com.interviewpartner.bot.model.InterviewStatus;
 import com.interviewpartner.bot.model.Language;
 import com.interviewpartner.bot.model.Level;
-import com.interviewpartner.bot.model.Schedule;
 import com.interviewpartner.bot.model.User;
 import com.interviewpartner.bot.repository.InterviewRepository;
-import com.interviewpartner.bot.repository.ScheduleRepository;
 import com.interviewpartner.bot.repository.UserRepository;
 import com.interviewpartner.bot.service.dto.AvailableSlotDto;
+import com.interviewpartner.bot.service.request.InterviewRequestService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
-import java.time.DayOfWeek;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.TreeSet;
 
 @Slf4j
 @Service
@@ -38,7 +32,7 @@ public class InterviewServiceImpl implements InterviewService {
 
     private final InterviewRepository interviewRepository;
     private final UserRepository userRepository;
-    private final ScheduleRepository scheduleRepository;
+    private final InterviewRequestService interviewRequestService;
 
     private final String jitsiMeetBaseUrl;
     private final Clock clock;
@@ -46,13 +40,13 @@ public class InterviewServiceImpl implements InterviewService {
     public InterviewServiceImpl(
             InterviewRepository interviewRepository,
             UserRepository userRepository,
-            ScheduleRepository scheduleRepository,
+            InterviewRequestService interviewRequestService,
             @Value("${video-meeting.jitsi-base-url:https://meet.jit.si}") String jitsiMeetBaseUrl,
             Clock clock
     ) {
         this.interviewRepository = interviewRepository;
         this.userRepository = userRepository;
-        this.scheduleRepository = scheduleRepository;
+        this.interviewRequestService = interviewRequestService;
         this.jitsiMeetBaseUrl = jitsiMeetBaseUrl.endsWith("/")
                 ? jitsiMeetBaseUrl.substring(0, jitsiMeetBaseUrl.length() - 1)
                 : jitsiMeetBaseUrl;
@@ -107,13 +101,7 @@ public class InterviewServiceImpl implements InterviewService {
     @Override
     @Transactional(readOnly = true)
     public List<User> findAvailablePartners(Long userId, Language language, LocalDateTime dateTime) {
-        return scheduleRepository.findByLanguageAndUserIdNot(language, userId).stream()
-                .map(Schedule::getUser)
-                .distinct()
-                .filter(u -> isInterviewerAvailable(u.getId(), dateTime))
-                .filter(u -> interviewRepository.findConflictingInterviews(u.getId(), dateTime, 60).isEmpty())
-                .filter(u -> interviewRepository.findConflictingInterviews(userId, dateTime, 60).isEmpty())
-                .toList();
+        return List.of();
     }
 
     @Override
@@ -121,19 +109,18 @@ public class InterviewServiceImpl implements InterviewService {
     public List<AvailableSlotDto> getAvailableSlotsAsCandidate(Long candidateUserId, Language language, Level level, int daysAhead) {
         LocalDateTime now = LocalDateTime.now(clock);
 
-        List<Interview> soloInterviewerSlots = interviewRepository.findOpenSoloSlots(
-                language, candidateUserId, false, now);
+        var soloRequests = interviewRequestService.getOpenSoloRequests(language, candidateUserId, now);
 
         List<AvailableSlotDto> out = new ArrayList<>();
-        for (Interview interview : soloInterviewerSlots) {
-            Long interviewerId = interview.getInterviewer().getId();
+        for (var request : soloRequests) {
+            Long interviewerId = request.getInterviewer().getId();
             if (interviewerId.equals(candidateUserId)) continue;
-            // Фильтрация по уровню: если уровень указан, показываем только совпадающие слоты
-            if (level != null && !level.equals(interview.getLevel())) continue;
-            if (interviewRepository.findConflictingPairedInterviews(candidateUserId, interview.getDateTime(), SLOT_DURATION).isEmpty()) {
-                User interviewer = interview.getInterviewer();
+            Level partnerLevel = request.getInterviewer() != null ? request.getInterviewer().getLevel() : null;
+            if (level != null && !level.equals(partnerLevel)) continue;
+            if (interviewRepository.findConflictingPairedInterviews(candidateUserId, request.getDateTime(), SLOT_DURATION).isEmpty()) {
+                User interviewer = request.getInterviewer();
                 String baseLabel = interviewer.getUsername() != null ? "@" + interviewer.getUsername() : "User " + interviewerId;
-                out.add(new AvailableSlotDto(interview.getDateTime(), interviewerId, baseLabel, interview.getId(), interview.getLevel()));
+                out.add(new AvailableSlotDto(request.getDateTime(), interviewerId, baseLabel, request.getId(), partnerLevel));
             }
         }
 
@@ -237,58 +224,4 @@ public class InterviewServiceImpl implements InterviewService {
         return jitsiMeetBaseUrl + "/interviewpartner-" + interviewId;
     }
 
-    private boolean isInterviewerAvailable(Long interviewerId, LocalDateTime dateTime) {
-        if (dateTime == null) return false;
-        var day = dateTime.getDayOfWeek();
-        var time = dateTime.toLocalTime();
-        return scheduleRepository.findByUserIdAndDayOfWeek(interviewerId, day).stream()
-                .filter(s -> Boolean.TRUE.equals(s.getIsAvailable()))
-                .anyMatch(s -> !time.isBefore(s.getStartTime()) && time.isBefore(s.getEndTime()));
-    }
-
-    private boolean isInterviewerAvailable(Long interviewerId, LocalDateTime dateTime, CandidateSlot cSlot) {
-        return scheduleRepository.findByUserIdAndDayOfWeek(interviewerId, cSlot.getDayOfWeek()).stream()
-                .filter(s -> Boolean.TRUE.equals(s.getIsAvailable()))
-                .anyMatch(s -> overlapsTime(s.getStartTime(), s.getEndTime(), cSlot.getStartTime(), cSlot.getEndTime()));
-    }
-
-    private boolean isInterviewerFreeAt(Long interviewerId, LocalDateTime dateTime) {
-        var day = dateTime.getDayOfWeek();
-        var time = dateTime.toLocalTime();
-        return scheduleRepository.findByUserIdAndDayOfWeek(interviewerId, day).stream()
-                .filter(s -> Boolean.TRUE.equals(s.getIsAvailable()))
-                .anyMatch(s -> !time.isBefore(s.getStartTime()) && time.isBefore(s.getEndTime()));
-    }
-
-    private static List<LocalDateTime> getScheduleSlotStarts(Schedule slot, LocalDate from, LocalDate to, int durationMinutes) {
-        var result = new TreeSet<LocalDateTime>();
-        for (LocalDate d = from; !d.isAfter(to); d = d.plusDays(1)) {
-            if (d.getDayOfWeek() != slot.getDayOfWeek() || !Boolean.TRUE.equals(slot.getIsAvailable())) continue;
-            LocalTime start = slot.getStartTime();
-            LocalTime end = slot.getEndTime();
-            if (start.plusMinutes(durationMinutes).isAfter(end)) continue;
-            for (LocalTime t = start; t.plusMinutes(durationMinutes).compareTo(end) <= 0; t = t.plusMinutes(60)) {
-                result.add(d.atTime(t));
-            }
-        }
-        return new ArrayList<>(result);
-    }
-
-    private static List<LocalDateTime> getCandidateSlotStarts(CandidateSlot slot, LocalDate from, LocalDate to, int durationMinutes) {
-        var result = new TreeSet<LocalDateTime>();
-        for (LocalDate d = from; !d.isAfter(to); d = d.plusDays(1)) {
-            if (d.getDayOfWeek() != slot.getDayOfWeek() || !Boolean.TRUE.equals(slot.getIsAvailable())) continue;
-            LocalTime start = slot.getStartTime();
-            LocalTime end = slot.getEndTime();
-            if (start.plusMinutes(durationMinutes).isAfter(end)) continue;
-            for (LocalTime t = start; t.plusMinutes(durationMinutes).compareTo(end) <= 0; t = t.plusMinutes(60)) {
-                result.add(d.atTime(t));
-            }
-        }
-        return new ArrayList<>(result);
-    }
-
-    private static boolean overlapsTime(LocalTime start1, LocalTime end1, LocalTime start2, LocalTime end2) {
-        return start1.isBefore(end2) && start2.isBefore(end1);
-    }
 }

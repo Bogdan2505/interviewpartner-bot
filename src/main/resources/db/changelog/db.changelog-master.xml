@@ -61,4 +61,20 @@
                 stripComments="true"/>
     </changeSet>
 
+    <changeSet id="008-backfill-interview-requests-from-interviews" author="interviewpartner">
+        <sqlFile
+                path="sql/008_backfill_interview_requests_from_interviews.sql"
+                relativeToChangelogFile="true"
+                splitStatements="true"
+                stripComments="true"/>
+    </changeSet>
+
+    <changeSet id="009-drop-schedules-and-candidate-slots" author="interviewpartner">
+        <sqlFile
+                path="sql/009_drop_schedules_and_candidate_slots.sql"
+                relativeToChangelogFile="true"
+                splitStatements="true"
+                stripComments="true"/>
+    </changeSet>
+
 </databaseChangeLog>

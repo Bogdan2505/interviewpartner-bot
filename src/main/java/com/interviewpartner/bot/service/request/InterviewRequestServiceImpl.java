@@ -6,6 +6,7 @@ import com.interviewpartner.bot.model.InterviewFormat;
 import com.interviewpartner.bot.model.InterviewRequest;
 import com.interviewpartner.bot.model.InterviewRequestStatus;
 import com.interviewpartner.bot.model.Language;
+import com.interviewpartner.bot.repository.InterviewRepository;
 import com.interviewpartner.bot.repository.InterviewRequestRepository;
 import com.interviewpartner.bot.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -15,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Objects;
 
 @Slf4j
@@ -24,6 +26,7 @@ import java.util.Objects;
 public class InterviewRequestServiceImpl implements InterviewRequestService {
 
     private final InterviewRequestRepository interviewRequestRepository;
+    private final InterviewRepository interviewRepository;
     private final UserRepository userRepository;
     private final Clock clock;
 
@@ -42,6 +45,25 @@ public class InterviewRequestServiceImpl implements InterviewRequestService {
         LocalDateTime now = LocalDateTime.now(clock);
         if (dateTime.isBefore(now)) {
             throw new IllegalArgumentException("Interview request time must not be in the past");
+        }
+        if (!interviewRepository.findConflictingInterviews(candidateUserId, dateTime, durationMinutes).isEmpty()) {
+            throw new IllegalArgumentException("Candidate has conflicting interview");
+        }
+        if (!interviewRepository.findConflictingInterviews(interviewerUserId, dateTime, durationMinutes).isEmpty()) {
+            throw new IllegalArgumentException("Interviewer has conflicting interview");
+        }
+        boolean duplicatePendingExists = interviewRequestRepository
+                .existsByCandidateIdAndInterviewerIdAndLanguageAndFormatAndDateTimeAndDurationMinutesAndStatus(
+                        candidateUserId,
+                        interviewerUserId,
+                        language,
+                        format,
+                        dateTime,
+                        durationMinutes,
+                        InterviewRequestStatus.PENDING
+                );
+        if (duplicatePendingExists) {
+            throw new IllegalArgumentException("Duplicate pending interview request");
         }
 
         InterviewRequest saved = interviewRequestRepository.save(InterviewRequest.builder()
@@ -85,6 +107,18 @@ public class InterviewRequestServiceImpl implements InterviewRequestService {
     public InterviewRequest getPending(Long requestId) {
         return interviewRequestRepository.findByIdAndStatus(requestId, InterviewRequestStatus.PENDING)
                 .orElseThrow(() -> new IllegalArgumentException("Request not found or not pending: id=" + requestId));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<InterviewRequest> getUserRequests(Long userId, InterviewRequestStatus status) {
+        return interviewRequestRepository.findByUserIdAndOptionalStatus(userId, status);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<InterviewRequest> getOpenSoloRequests(Language language, Long excludeUserId, LocalDateTime now) {
+        return interviewRequestRepository.findOpenSoloRequests(language, excludeUserId, now);
     }
 
     private InterviewRequest getPendingForInterviewer(Long requestId, long interviewerTelegramId) {

@@ -38,14 +38,7 @@ public class CreateInterviewMessageHandler implements BotCommandHandler {
 
     @Override
     public boolean canHandle(Update update) {
-        if (!update.hasMessage() || !update.getMessage().hasText()) {
-            return false;
-        }
-        if (ChatMenuKeyboardBuilder.isMenuButton(update.getMessage().getText())) {
-            return false;
-        }
-        Long chatId = update.getMessage().getChatId();
-        return stateService.getCreateInterview(chatId).isPresent();
+        return false;
     }
 
     @Override

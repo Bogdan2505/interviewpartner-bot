@@ -1,9 +1,8 @@
 package com.interviewpartner.bot.telegram.handler;
 
 import com.interviewpartner.bot.model.User;
-import com.interviewpartner.bot.service.InterviewService;
-import com.interviewpartner.bot.service.UserService;
 import com.interviewpartner.bot.telegram.flow.ConversationStateService;
+import com.interviewpartner.bot.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
@@ -23,7 +22,6 @@ import java.util.List;
 public class ScheduleCommandHandler implements BotCommandHandler {
 
     private static final String CMD = "/schedule";
-    private static final String IC_PREFIX = "ic:";
 
     private final UserService userService;
     private final ConversationStateService stateService;
@@ -53,7 +51,6 @@ public class ScheduleCommandHandler implements BotCommandHandler {
 
             String username = from.getUserName() != null ? from.getUserName() : from.getFirstName();
             User user = userService.registerUser(from.getId(), username != null ? username : "user");
-
             stateService.startInterviewCalendar(chatId, user.getId());
 
             telegramClient.execute(SendMessage.builder()
@@ -66,22 +63,22 @@ public class ScheduleCommandHandler implements BotCommandHandler {
         }
     }
 
-    public static InlineKeyboardMarkup buildFilterSelectionKeyboard() {
+    private static InlineKeyboardMarkup buildFilterSelectionKeyboard() {
         return InlineKeyboardMarkup.builder().keyboard(List.of(
                 new InlineKeyboardRow(
                         InlineKeyboardButton.builder()
                                 .text("Заявки на собеседования")
-                                .callbackData(IC_PREFIX + "filter:PENDING")
+                                .callbackData("ic:filter:PENDING")
                                 .build()
                 ),
                 new InlineKeyboardRow(
                         InlineKeyboardButton.builder()
                                 .text("Согласованные собеседования")
-                                .callbackData(IC_PREFIX + "filter:CONFIRMED")
+                                .callbackData("ic:filter:CONFIRMED")
                                 .build()
                 ),
                 new InlineKeyboardRow(
-                        InlineKeyboardButton.builder().text("Закрыть").callbackData(IC_PREFIX + "close").build()
+                        InlineKeyboardButton.builder().text("Закрыть").callbackData("ic:close").build()
                 )
         )).build();
     }
