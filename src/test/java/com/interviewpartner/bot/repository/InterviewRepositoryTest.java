@@ -4,7 +4,6 @@ import com.interviewpartner.bot.model.Interview;
 import com.interviewpartner.bot.model.InterviewFormat;
 import com.interviewpartner.bot.model.InterviewStatus;
 import com.interviewpartner.bot.model.Language;
-import com.interviewpartner.bot.model.Level;
 import com.interviewpartner.bot.model.User;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,10 +28,10 @@ class InterviewRepositoryTest {
     @Test
     void shouldFindConflictingInterviewsForCandidateOrInterviewer() {
         var candidate = userRepository.saveAndFlush(User.builder()
-                .telegramId(1L).username("c").language(Language.RUSSIAN).level(Level.JUNIOR)
+                .telegramId(1L).username("c")
                 .build());
         var interviewer = userRepository.saveAndFlush(User.builder()
-                .telegramId(2L).username("i").language(Language.RUSSIAN).level(Level.JUNIOR)
+                .telegramId(2L).username("i")
                 .build());
 
         var start = LocalDateTime.of(2026, 3, 18, 12, 0);
@@ -58,10 +57,10 @@ class InterviewRepositoryTest {
     @Test
     void shouldFindByDateTimeBetween() {
         var u1 = userRepository.saveAndFlush(User.builder()
-                .telegramId(10L).username("a").language(Language.ENGLISH).level(Level.MIDDLE)
+                .telegramId(10L).username("a")
                 .build());
         var u2 = userRepository.saveAndFlush(User.builder()
-                .telegramId(11L).username("b").language(Language.ENGLISH).level(Level.MIDDLE)
+                .telegramId(11L).username("b")
                 .build());
 
         interviewRepository.saveAllAndFlush(List.of(
@@ -90,10 +89,10 @@ class InterviewRepositoryTest {
     @Test
     void findByIdWithParticipants_joinFetchCandidateAndInterviewer() {
         var candidate = userRepository.saveAndFlush(User.builder()
-                .telegramId(20L).username("c20").language(Language.RUSSIAN).level(Level.JUNIOR)
+                .telegramId(20L).username("c20")
                 .build());
         var interviewer = userRepository.saveAndFlush(User.builder()
-                .telegramId(21L).username("i21").language(Language.RUSSIAN).level(Level.JUNIOR)
+                .telegramId(21L).username("i21")
                 .build());
         var saved = interviewRepository.saveAndFlush(Interview.builder()
                 .candidate(candidate)

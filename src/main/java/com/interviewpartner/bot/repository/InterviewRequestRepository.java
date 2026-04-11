@@ -4,6 +4,7 @@ import com.interviewpartner.bot.model.InterviewFormat;
 import com.interviewpartner.bot.model.InterviewRequest;
 import com.interviewpartner.bot.model.InterviewRequestStatus;
 import com.interviewpartner.bot.model.Language;
+import com.interviewpartner.bot.model.Level;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -16,7 +17,7 @@ public interface InterviewRequestRepository extends JpaRepository<InterviewReque
 
     @Query("""
             select r from InterviewRequest r
-            left join fetch r.partner
+            left join fetch r.candidate
             join fetch r.slotOwner
             where r.id = :id and r.status = :status
             """)
@@ -24,9 +25,9 @@ public interface InterviewRequestRepository extends JpaRepository<InterviewReque
 
     @Query("""
             select r from InterviewRequest r
-            left join fetch r.partner
+            left join fetch r.candidate
             join fetch r.slotOwner
-            where (r.slotOwner.id = :userId or (r.partner is not null and r.partner.id = :userId))
+            where (r.slotOwner.id = :userId or (r.candidate is not null and r.candidate.id = :userId))
               and (:status is null or r.status = :status)
             order by r.dateTime desc
             """)
@@ -36,7 +37,7 @@ public interface InterviewRequestRepository extends JpaRepository<InterviewReque
     @Query("""
             select r from InterviewRequest r
             join fetch r.slotOwner
-            where r.partner is null
+            where r.candidate is null
               and r.language = :language
               and r.status = com.interviewpartner.bot.model.InterviewRequestStatus.PENDING
               and r.dateTime > :now
@@ -47,18 +48,19 @@ public interface InterviewRequestRepository extends JpaRepository<InterviewReque
                                                 @Param("excludeUserId") Long excludeUserId,
                                                 @Param("now") LocalDateTime now);
 
-    boolean existsBySlotOwnerIdAndPartnerIsNullAndLanguageAndFormatAndDateTimeAndDurationMinutesAndStatus(
+    boolean existsBySlotOwnerIdAndCandidateIsNullAndLanguageAndFormatAndDateTimeAndDurationMinutesAndStatusAndLevel(
             Long slotOwnerId,
             Language language,
             InterviewFormat format,
             LocalDateTime dateTime,
             Integer durationMinutes,
-            InterviewRequestStatus status
+            InterviewRequestStatus status,
+            Level level
     );
 
-    boolean existsBySlotOwnerIdAndPartnerIdAndLanguageAndFormatAndDateTimeAndDurationMinutesAndStatus(
+    boolean existsBySlotOwnerIdAndCandidateIdAndLanguageAndFormatAndDateTimeAndDurationMinutesAndStatus(
             Long slotOwnerId,
-            Long partnerId,
+            Long candidateId,
             Language language,
             InterviewFormat format,
             LocalDateTime dateTime,

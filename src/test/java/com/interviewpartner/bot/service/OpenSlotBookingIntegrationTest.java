@@ -56,9 +56,9 @@ class OpenSlotBookingIntegrationTest {
         LocalDateTime now = LocalDateTime.now();
 
         var solo1 = interviewRequestService.createRequest(
-                owner1.getId(), owner1.getId(), Language.RUSSIAN, InterviewFormat.TECHNICAL, t1, 60);
+                owner1.getId(), owner1.getId(), Language.RUSSIAN, InterviewFormat.TECHNICAL, t1, 60, Level.JUNIOR);
         var solo2 = interviewRequestService.createRequest(
-                owner2.getId(), owner2.getId(), Language.RUSSIAN, InterviewFormat.TECHNICAL, t2, 60);
+                owner2.getId(), owner2.getId(), Language.RUSSIAN, InterviewFormat.TECHNICAL, t2, 60, Level.JUNIOR);
 
         interviewRequestService.completeOpenSlotWithJoiner(
                 solo1.getId(), joiner.getId(), Language.RUSSIAN, InterviewFormat.TECHNICAL, t1, 60, now);
@@ -67,10 +67,10 @@ class OpenSlotBookingIntegrationTest {
 
         assertThat(interviewRequestRepository.findAll()).hasSize(2);
         assertThat(interviewRequestRepository.findAll())
-                .allMatch(r -> r.getStatus() == InterviewRequestStatus.ACCEPTED && r.getPartner() != null);
+                .allMatch(r -> r.getStatus() == InterviewRequestStatus.ACCEPTED && r.getCandidate() == null);
 
         long orphanPending = interviewRequestRepository.findAll().stream()
-                .filter(r -> r.getStatus() == InterviewRequestStatus.PENDING && r.getPartner() == null)
+                .filter(r -> r.getStatus() == InterviewRequestStatus.PENDING && r.getCandidate() == null)
                 .count();
         assertThat(orphanPending).isZero();
 
@@ -87,8 +87,6 @@ class OpenSlotBookingIntegrationTest {
         return userRepository.saveAndFlush(User.builder()
                 .telegramId(telegramId)
                 .username(username)
-                .language(Language.RUSSIAN)
-                .level(Level.JUNIOR)
                 .build());
     }
 

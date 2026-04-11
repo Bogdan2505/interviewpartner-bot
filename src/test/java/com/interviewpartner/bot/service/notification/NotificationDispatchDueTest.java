@@ -4,7 +4,6 @@ import com.interviewpartner.bot.model.Interview;
 import com.interviewpartner.bot.model.InterviewFormat;
 import com.interviewpartner.bot.model.InterviewStatus;
 import com.interviewpartner.bot.model.Language;
-import com.interviewpartner.bot.model.Level;
 import com.interviewpartner.bot.model.Notification;
 import com.interviewpartner.bot.model.ReminderType;
 import com.interviewpartner.bot.model.User;
@@ -46,10 +45,10 @@ class NotificationDispatchDueTest {
         );
 
         User u1 = userRepository.saveAndFlush(User.builder()
-                .telegramId(1L).username("u1").language(Language.RUSSIAN).level(Level.JUNIOR)
+                .telegramId(1L).username("u1")
                 .build());
         User u2 = userRepository.saveAndFlush(User.builder()
-                .telegramId(2L).username("u2").language(Language.RUSSIAN).level(Level.JUNIOR)
+                .telegramId(2L).username("u2")
                 .build());
         LocalDateTime now = LocalDateTime.of(2026, 3, 18, 12, 0);
         Interview interview = interviewRepository.saveAndFlush(Interview.builder()

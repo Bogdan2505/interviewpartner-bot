@@ -22,7 +22,8 @@ import java.time.LocalDateTime;
 /**
  * Заявка на собеседование.
  * Владелец слота ({@link #slotOwner}): для открытого окна — создатель; для входящей заявки — интервьюер, который принимает решение.
- * {@link #partner}: null — открытый solo-слот; иначе второй участник (записавшийся или инициатор заявки к интервьюеру).
+ * {@link #candidate}: null — открытый solo-слот (в заявке только {@link #slotOwner}).
+ * Для прямой заявки к интервьюеру — кандидат (инициатор); после записи на открытый слот второй участник хранится только в {@link Interview}.
  */
 @Getter
 @Setter
@@ -42,12 +43,17 @@ public class InterviewRequest {
     private User slotOwner;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "partner_user_id", nullable = true)
-    private User partner;
+    @JoinColumn(name = "candidate_id", nullable = true)
+    private User candidate;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "language", nullable = false)
     private Language language;
+
+    /** Грейд владельца слота (solo) или контекст заявки; для прямых заявок без выбора грейда — null. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "level")
+    private Level level;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "format", nullable = false)

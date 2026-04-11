@@ -1,8 +1,6 @@
 package com.interviewpartner.bot.service;
 
 import com.interviewpartner.bot.exception.UserNotFoundException;
-import com.interviewpartner.bot.model.Language;
-import com.interviewpartner.bot.model.Level;
 import com.interviewpartner.bot.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -49,20 +47,5 @@ class UserServiceTest {
                 .isInstanceOf(UserNotFoundException.class);
     }
 
-    @Test
-    void updateUserLanguage_shouldUpdate() {
-        var user = userService.registerUser(3000L, "u");
-
-        var updated = userService.updateUserLanguage(user.getId(), Language.ENGLISH);
-        assertThat(updated.getLanguage()).isEqualTo(Language.ENGLISH);
-    }
-
-    @Test
-    void updateUserLevel_shouldUpdate() {
-        var user = userService.registerUser(4000L, "u");
-
-        var updated = userService.updateUserLevel(user.getId(), Level.SENIOR);
-        assertThat(updated.getLevel()).isEqualTo(Level.SENIOR);
-    }
 }
 

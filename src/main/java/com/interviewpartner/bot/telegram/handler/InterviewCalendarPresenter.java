@@ -1,7 +1,10 @@
 package com.interviewpartner.bot.telegram.handler;
 
+import com.interviewpartner.bot.model.Interview;
 import com.interviewpartner.bot.model.InterviewRequest;
 import com.interviewpartner.bot.model.InterviewRequestStatus;
+import com.interviewpartner.bot.model.InterviewStatus;
+import com.interviewpartner.bot.service.InterviewService;
 import com.interviewpartner.bot.service.request.InterviewRequestService;
 import com.interviewpartner.bot.telegram.flow.InterviewCalendarState;
 import lombok.RequiredArgsConstructor;
@@ -34,6 +37,7 @@ public class InterviewCalendarPresenter {
     };
 
     private final InterviewRequestService interviewRequestService;
+    private final InterviewService interviewService;
     private final Clock clock;
 
     /**
@@ -44,12 +48,13 @@ public class InterviewCalendarPresenter {
                               boolean alignMonthToFirstUpcoming)
             throws TelegramApiException {
         List<InterviewRequest> scheduled = interviewRequestService.getUserRequests(state.userId, null);
+        List<Interview> interviews = interviewService.getUserInterviews(state.userId, InterviewStatus.SCHEDULED);
         if (alignMonthToFirstUpcoming) {
-            alignStateMonthToFirstUpcoming(state, scheduled);
+            alignStateMonthToFirstUpcoming(state, scheduled, interviews);
         }
         int year = state.calendarYear;
         int month = state.calendarMonth;
-        InlineKeyboardMarkup keyboard = buildMonthKeyboard(year, month, scheduled);
+        InlineKeyboardMarkup keyboard = buildMonthKeyboard(year, month, scheduled, interviews);
 
         String text = "Расписание — " + MONTH_NAMES_RU[month - 1] + " " + year + ".\nВыберите день.";
 
@@ -83,9 +88,11 @@ public class InterviewCalendarPresenter {
         sendMonthView(chatId, messageId, state, telegramClient, false);
     }
 
-    private void alignStateMonthToFirstUpcoming(InterviewCalendarState state, List<InterviewRequest> scheduled) {
+    private void alignStateMonthToFirstUpcoming(InterviewCalendarState state,
+                                                List<InterviewRequest> scheduled,
+                                                List<Interview> interviews) {
         LocalDate today = LocalDate.now(clock);
-        LocalDate minUpcoming = scheduled.stream()
+        LocalDate minReq = scheduled.stream()
                 .filter(i -> i.getDateTime() != null)
                 .filter(i -> i.getStatus() != InterviewRequestStatus.DECLINED
                         && i.getStatus() != InterviewRequestStatus.CANCELLED)
@@ -93,6 +100,13 @@ public class InterviewCalendarPresenter {
                 .filter(d -> !d.isBefore(today))
                 .min(LocalDate::compareTo)
                 .orElse(null);
+        LocalDate minIv = interviews.stream()
+                .filter(i -> i.getDateTime() != null)
+                .map(i -> i.getDateTime().toLocalDate())
+                .filter(d -> !d.isBefore(today))
+                .min(LocalDate::compareTo)
+                .orElse(null);
+        LocalDate minUpcoming = minReq == null ? minIv : (minIv == null ? minReq : minReq.isBefore(minIv) ? minReq : minIv);
         if (minUpcoming != null) {
             state.calendarYear = minUpcoming.getYear();
             state.calendarMonth = minUpcoming.getMonthValue();
@@ -103,7 +117,7 @@ public class InterviewCalendarPresenter {
         }
     }
 
-    public InlineKeyboardMarkup buildMonthKeyboard(int year, int month, List<InterviewRequest> scheduled) {
+    public InlineKeyboardMarkup buildMonthKeyboard(int year, int month, List<InterviewRequest> scheduled, List<Interview> interviews) {
         YearMonth ym = YearMonth.of(year, month);
 
         LocalDate today = LocalDate.now(clock);
@@ -115,6 +129,15 @@ public class InterviewCalendarPresenter {
                 continue;
             }
             LocalDate d = i.getDateTime().toLocalDate();
+            if (d.isBefore(today)) {
+                continue;
+            }
+            if (d.getYear() != year || d.getMonthValue() != month) continue;
+            datesWithSlots.add(d);
+        }
+        for (Interview iv : interviews) {
+            if (iv.getDateTime() == null) continue;
+            LocalDate d = iv.getDateTime().toLocalDate();
             if (d.isBefore(today)) {
                 continue;
             }

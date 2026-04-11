@@ -4,7 +4,6 @@ import com.interviewpartner.bot.model.Interview;
 import com.interviewpartner.bot.model.InterviewFormat;
 import com.interviewpartner.bot.model.InterviewStatus;
 import com.interviewpartner.bot.model.Language;
-import com.interviewpartner.bot.model.Level;
 import com.interviewpartner.bot.model.ReminderType;
 import com.interviewpartner.bot.model.User;
 import com.interviewpartner.bot.repository.InterviewRepository;
@@ -72,8 +71,6 @@ class NotificationDispatchServiceTest {
         return User.builder()
                 .telegramId(telegramId)
                 .username(username)
-                .language(Language.RUSSIAN)
-                .level(Level.JUNIOR)
                 .build();
     }
 }

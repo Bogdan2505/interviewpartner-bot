@@ -1,7 +1,5 @@
 package com.interviewpartner.bot.service;
 
-import com.interviewpartner.bot.model.Language;
-import com.interviewpartner.bot.model.Level;
 import com.interviewpartner.bot.model.User;
 
 public interface UserService {
@@ -10,9 +8,5 @@ public interface UserService {
     User getUserByTelegramId(Long telegramId);
 
     User getUserById(Long userId);
-
-    User updateUserLanguage(Long userId, Language language);
-
-    User updateUserLevel(Long userId, Level level);
 }
 

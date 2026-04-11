@@ -85,4 +85,28 @@
                 stripComments="true"/>
     </changeSet>
 
+    <changeSet id="011-interview-request-level-drop-user-lang-level" author="interviewpartner">
+        <sqlFile
+                path="sql/011_interview_request_level_drop_user_lang_level.sql"
+                relativeToChangelogFile="true"
+                splitStatements="true"
+                stripComments="true"/>
+    </changeSet>
+
+    <changeSet id="012-rename-partner-to-applicant" author="interviewpartner">
+        <sqlFile
+                path="sql/012_rename_partner_to_applicant.sql"
+                relativeToChangelogFile="true"
+                splitStatements="true"
+                stripComments="true"/>
+    </changeSet>
+
+    <changeSet id="013-rename-applicant-to-candidate" author="interviewpartner">
+        <sqlFile
+                path="sql/013_rename_applicant_to_candidate.sql"
+                relativeToChangelogFile="true"
+                splitStatements="true"
+                stripComments="true"/>
+    </changeSet>
+
 </databaseChangeLog>

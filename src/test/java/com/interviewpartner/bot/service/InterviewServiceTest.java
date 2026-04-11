@@ -192,7 +192,8 @@ class InterviewServiceTest {
                     Language.RUSSIAN,
                     InterviewFormat.TECHNICAL,
                     base.plusHours(i),
-                    60);
+                    60,
+                    Level.JUNIOR);
         }
 
         var slots = interviewService.getAvailableSlotsAsCandidate(seeker.getId(), Language.RUSSIAN, null, 14);
@@ -205,8 +206,6 @@ class InterviewServiceTest {
         return userRepository.saveAndFlush(User.builder()
                 .telegramId(telegramId)
                 .username(username)
-                .language(Language.RUSSIAN)
-                .level(Level.JUNIOR)
                 .build());
     }
 

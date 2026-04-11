@@ -1,8 +1,6 @@
 package com.interviewpartner.bot.service;
 
 import com.interviewpartner.bot.exception.UserNotFoundException;
-import com.interviewpartner.bot.model.Language;
-import com.interviewpartner.bot.model.Level;
 import com.interviewpartner.bot.model.User;
 import com.interviewpartner.bot.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -45,24 +43,5 @@ public class UserServiceImpl implements UserService {
                 .orElseThrow(() -> new UserNotFoundException("User with id=" + userId + " not found"));
     }
 
-    @Override
-    public User updateUserLanguage(Long userId, Language language) {
-        var user = userRepository.findById(userId)
-                .orElseThrow(() -> new UserNotFoundException("User with id=" + userId + " not found"));
-        user.setLanguage(language);
-        User saved = userRepository.save(user);
-        log.info("Обновлён язык пользователя: userId={}, language={}", userId, language);
-        return saved;
-    }
-
-    @Override
-    public User updateUserLevel(Long userId, Level level) {
-        var user = userRepository.findById(userId)
-                .orElseThrow(() -> new UserNotFoundException("User with id=" + userId + " not found"));
-        user.setLevel(level);
-        User saved = userRepository.save(user);
-        log.info("Обновлён грейд пользователя: userId={}, level={}", userId, level);
-        return saved;
-    }
 }
 

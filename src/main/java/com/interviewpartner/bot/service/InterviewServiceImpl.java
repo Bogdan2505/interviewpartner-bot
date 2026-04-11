@@ -115,7 +115,7 @@ public class InterviewServiceImpl implements InterviewService {
         for (var request : soloRequests) {
             Long ownerId = request.getSlotOwner().getId();
             if (ownerId.equals(candidateUserId)) continue;
-            Level partnerLevel = request.getSlotOwner().getLevel();
+            Level partnerLevel = request.getLevel();
             if (level != null && !level.equals(partnerLevel)) continue;
             if (interviewRepository.findConflictingPairedInterviews(candidateUserId, request.getDateTime(), SLOT_DURATION).isEmpty()) {
                 User owner = request.getSlotOwner();

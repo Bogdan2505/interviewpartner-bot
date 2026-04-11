@@ -1,7 +1,5 @@
 package com.interviewpartner.bot.repository;
 
-import com.interviewpartner.bot.model.Language;
-import com.interviewpartner.bot.model.Level;
 import com.interviewpartner.bot.model.User;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,8 +22,6 @@ class UserRepositoryTest {
         var user = User.builder()
                 .telegramId(123L)
                 .username("bogdan")
-                .language(Language.RUSSIAN)
-                .level(Level.JUNIOR)
                 .build();
 
         var saved = userRepository.saveAndFlush(user);
@@ -39,15 +35,11 @@ class UserRepositoryTest {
         userRepository.saveAndFlush(User.builder()
                 .telegramId(555L)
                 .username("u1")
-                .language(Language.RUSSIAN)
-                .level(Level.JUNIOR)
                 .build());
 
         assertThatThrownBy(() -> userRepository.saveAndFlush(User.builder()
                 .telegramId(555L)
                 .username("u2")
-                .language(Language.ENGLISH)
-                .level(Level.MIDDLE)
                 .build()))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
@@ -57,8 +49,6 @@ class UserRepositoryTest {
         userRepository.saveAndFlush(User.builder()
                 .telegramId(777L)
                 .username("u")
-                .language(Language.ENGLISH)
-                .level(Level.SENIOR)
                 .build());
 
         var found = userRepository.findByTelegramId(777L);
