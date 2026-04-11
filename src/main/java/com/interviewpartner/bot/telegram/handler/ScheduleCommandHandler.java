@@ -8,13 +8,8 @@ import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
-import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
-import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
-import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardRow;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.meta.generics.TelegramClient;
-
-import java.util.List;
 
 @Order(23)
 @Component
@@ -25,6 +20,7 @@ public class ScheduleCommandHandler implements BotCommandHandler {
 
     private final UserService userService;
     private final ConversationStateService stateService;
+    private final InterviewCalendarPresenter interviewCalendarPresenter;
 
     @Override
     public boolean canHandle(Update update) {
@@ -51,35 +47,10 @@ public class ScheduleCommandHandler implements BotCommandHandler {
 
             String username = from.getUserName() != null ? from.getUserName() : from.getFirstName();
             User user = userService.registerUser(from.getId(), username != null ? username : "user");
-            stateService.startInterviewCalendar(chatId, user.getId());
-
-            telegramClient.execute(SendMessage.builder()
-                    .chatId(chatId)
-                    .text("Расписание — выберите раздел:")
-                    .replyMarkup(buildFilterSelectionKeyboard())
-                    .build());
+            var calendarState = stateService.startInterviewCalendar(chatId, user.getId());
+            interviewCalendarPresenter.sendMonthView(chatId, null, calendarState, telegramClient, true);
         } catch (TelegramApiException e) {
             throw new RuntimeException(e);
         }
-    }
-
-    private static InlineKeyboardMarkup buildFilterSelectionKeyboard() {
-        return InlineKeyboardMarkup.builder().keyboard(List.of(
-                new InlineKeyboardRow(
-                        InlineKeyboardButton.builder()
-                                .text("Заявки на собеседования")
-                                .callbackData("ic:filter:PENDING")
-                                .build()
-                ),
-                new InlineKeyboardRow(
-                        InlineKeyboardButton.builder()
-                                .text("Согласованные собеседования")
-                                .callbackData("ic:filter:CONFIRMED")
-                                .build()
-                ),
-                new InlineKeyboardRow(
-                        InlineKeyboardButton.builder().text("Закрыть").callbackData("ic:close").build()
-                )
-        )).build();
     }
 }

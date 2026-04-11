@@ -19,6 +19,11 @@ import lombok.Setter;
 
 import java.time.LocalDateTime;
 
+/**
+ * Заявка на собеседование.
+ * Владелец слота ({@link #slotOwner}): для открытого окна — создатель; для входящей заявки — интервьюер, который принимает решение.
+ * {@link #partner}: null — открытый solo-слот; иначе второй участник (записавшийся или инициатор заявки к интервьюеру).
+ */
 @Getter
 @Setter
 @NoArgsConstructor
@@ -33,12 +38,12 @@ public class InterviewRequest {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "candidate_id", nullable = false)
-    private User candidate;
+    @JoinColumn(name = "owner_user_id", nullable = false)
+    private User slotOwner;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "interviewer_id", nullable = false)
-    private User interviewer;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "partner_user_id", nullable = true)
+    private User partner;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "language", nullable = false)
@@ -64,4 +69,3 @@ public class InterviewRequest {
     @Column(name = "responded_at")
     private LocalDateTime respondedAt;
 }
-

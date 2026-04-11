@@ -11,6 +11,8 @@ import com.interviewpartner.bot.model.User;
 import com.interviewpartner.bot.config.ClockConfig;
 import com.interviewpartner.bot.repository.InterviewRepository;
 import com.interviewpartner.bot.repository.UserRepository;
+import com.interviewpartner.bot.service.request.InterviewRequestService;
+import com.interviewpartner.bot.service.request.InterviewRequestServiceImpl;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
@@ -24,11 +26,14 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DataJpaTest
 @ActiveProfiles("test")
-@Import({ClockConfig.class, InterviewServiceImpl.class, UserServiceImpl.class})
+@Import({ClockConfig.class, InterviewServiceImpl.class, UserServiceImpl.class, InterviewRequestServiceImpl.class})
 class InterviewServiceTest {
 
     @Autowired
     private InterviewService interviewService;
+
+    @Autowired
+    private InterviewRequestService interviewRequestService;
 
     @Autowired
     private UserRepository userRepository;
@@ -181,20 +186,14 @@ class InterviewServiceTest {
         for (int i = 0; i < 30; i++) {
             long telegramId = 8000L + i;
             var owner = createUser(telegramId, "owner" + i);
-            Interview openSolo = Interview.builder()
-                    .candidate(owner)
-                    .interviewer(owner)
-                    .language(Language.RUSSIAN)
-                    .level(Level.JUNIOR)
-                    .format(InterviewFormat.TECHNICAL)
-                    .dateTime(base.plusHours(i))
-                    .duration(60)
-                    .status(InterviewStatus.SCHEDULED)
-                    .initiatorIsCandidate(false)
-                    .build();
-            interviewRepository.save(openSolo);
+            interviewRequestService.createRequest(
+                    owner.getId(),
+                    owner.getId(),
+                    Language.RUSSIAN,
+                    InterviewFormat.TECHNICAL,
+                    base.plusHours(i),
+                    60);
         }
-        interviewRepository.flush();
 
         var slots = interviewService.getAvailableSlotsAsCandidate(seeker.getId(), Language.RUSSIAN, null, 14);
 

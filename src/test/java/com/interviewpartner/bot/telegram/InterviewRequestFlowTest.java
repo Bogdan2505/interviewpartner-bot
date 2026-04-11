@@ -11,6 +11,7 @@ import com.interviewpartner.bot.service.UserService;
 import com.interviewpartner.bot.service.request.InterviewRequestService;
 import com.interviewpartner.bot.telegram.flow.ConversationStateService;
 import com.interviewpartner.bot.telegram.handler.CallbackQueryHandler;
+import com.interviewpartner.bot.telegram.handler.InterviewCalendarPresenter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
@@ -23,6 +24,8 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
@@ -42,10 +45,11 @@ class InterviewRequestFlowTest {
     @BeforeEach
     void setUp() {
         telegramClient = mock(TelegramClient.class);
-        stateService = new ConversationStateService();
+        stateService = new ConversationStateService(Clock.systemUTC());
         interviewService = mock(InterviewService.class);
         userService = mock(UserService.class);
         interviewRequestService = mock(InterviewRequestService.class);
+        InterviewCalendarPresenter calendarPresenter = mock(InterviewCalendarPresenter.class);
 
         User candidate = mock(User.class);
         when(candidate.getId()).thenReturn(1L);
@@ -58,7 +62,7 @@ class InterviewRequestFlowTest {
         when(userService.getUserById(2L)).thenReturn(partner);
 
         handler = new CallbackQueryHandler(stateService, interviewService, userService, interviewRequestService,
-                Clock.systemUTC());
+                calendarPresenter, Clock.systemUTC());
     }
 
     @Test
@@ -68,8 +72,8 @@ class InterviewRequestFlowTest {
 
         InterviewRequest req = InterviewRequest.builder()
                 .id(10L)
-                .candidate(candidate)
-                .interviewer(partner)
+                .slotOwner(partner)
+                .partner(candidate)
                 .language(Language.RUSSIAN)
                 .format(InterviewFormat.TECHNICAL)
                 .dateTime(LocalDateTime.of(2026, 3, 25, 19, 0))
@@ -107,12 +111,12 @@ class InterviewRequestFlowTest {
         state.format = InterviewFormat.TECHNICAL;
         state.dateTime = LocalDateTime.of(2026, 4, 20, 19, 0);
         state.durationMinutes = 60;
-        state.joinInterviewId = null;
+        state.openSlotRequestId = null;
 
         InterviewRequest createdRequest = InterviewRequest.builder()
                 .id(77L)
-                .candidate(userService.getUserById(1L))
-                .interviewer(userService.getUserById(2L))
+                .slotOwner(userService.getUserById(2L))
+                .partner(userService.getUserById(1L))
                 .language(Language.RUSSIAN)
                 .format(InterviewFormat.TECHNICAL)
                 .dateTime(state.dateTime)
@@ -131,6 +135,56 @@ class InterviewRequestFlowTest {
                 eq(1L), eq(2L), eq(Language.RUSSIAN), eq(InterviewFormat.TECHNICAL), eq(state.dateTime), eq(60));
         verify(interviewService, never()).createInterview(
                 eq(1L), eq(2L), eq(Language.RUSSIAN), isNull(), eq(InterviewFormat.TECHNICAL), any(), eq(60), eq(true));
+        verify(telegramClient, org.mockito.Mockito.atLeastOnce()).execute(any(SendMessage.class));
+    }
+
+    @Test
+    void confirmYes_whenJoiningOpenSlot_shouldAutoAcceptAndCreateInterview() throws Exception {
+        long chatId = 111L;
+        var state = stateService.startCreateInterview(chatId, 1L);
+        state.candidateUserId = 1L;
+        state.interviewerUserId = 2L;
+        state.language = Language.RUSSIAN;
+        state.format = InterviewFormat.TECHNICAL;
+        state.dateTime = LocalDateTime.of(2026, 4, 20, 19, 0);
+        state.durationMinutes = 60;
+        state.openSlotRequestId = 555L;
+
+        User candidateUser = userService.getUserById(1L);
+        User partnerUser = userService.getUserById(2L);
+        InterviewRequest acceptedRequest = InterviewRequest.builder()
+                .id(555L)
+                .partner(candidateUser)
+                .slotOwner(partnerUser)
+                .language(Language.RUSSIAN)
+                .format(InterviewFormat.TECHNICAL)
+                .dateTime(state.dateTime)
+                .durationMinutes(60)
+                .status(InterviewRequestStatus.ACCEPTED)
+                .createdAt(LocalDateTime.of(2026, 4, 1, 12, 0))
+                .build();
+        when(interviewRequestService.completeOpenSlotWithJoiner(
+                eq(555L), eq(1L), eq(Language.RUSSIAN), eq(InterviewFormat.TECHNICAL), eq(state.dateTime), eq(60), any()))
+                .thenReturn(acceptedRequest);
+
+        Interview createdInterview = mock(Interview.class);
+        when(createdInterview.getId()).thenReturn(99L);
+        when(createdInterview.getVideoMeetingUrl()).thenReturn(null);
+        when(createdInterview.getCandidate()).thenReturn(candidateUser);
+        when(createdInterview.getInterviewer()).thenReturn(partnerUser);
+        when(interviewService.createInterview(eq(1L), eq(2L), eq(Language.RUSSIAN), isNull(), eq(InterviewFormat.TECHNICAL), any(), eq(60), eq(true)))
+                .thenReturn(createdInterview);
+        when(interviewService.getInterviewWithParticipants(99L)).thenReturn(createdInterview);
+
+        Update update = mockCallbackUpdate(chatId, 111L, "ci:confirm:yes");
+        handler.handle(update, telegramClient);
+
+        verify(interviewRequestService, never()).createRequest(
+                anyLong(), anyLong(), any(), any(), any(), anyInt());
+        verify(interviewRequestService, never()).accept(any(Long.class), anyLong(), any());
+        verify(interviewRequestService).completeOpenSlotWithJoiner(
+                eq(555L), eq(1L), eq(Language.RUSSIAN), eq(InterviewFormat.TECHNICAL), eq(state.dateTime), eq(60), any());
+        verify(interviewService).createInterview(eq(1L), eq(2L), eq(Language.RUSSIAN), isNull(), eq(InterviewFormat.TECHNICAL), any(), eq(60), eq(true));
         verify(telegramClient, org.mockito.Mockito.atLeastOnce()).execute(any(SendMessage.class));
     }
 

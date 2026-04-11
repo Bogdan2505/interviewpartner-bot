@@ -5,23 +5,21 @@ import com.interviewpartner.bot.model.Level;
 import java.time.LocalDateTime;
 
 /**
- * Слот для записи на взаимный час: время + создатель открытого окна (в БД — интервьюер первой половины после пары).
- * interviewId != null означает, что слот уже существует в таблице interviews
- * (solo-слот, созданный без партнёра) — нужно обновить его, а не создавать новый.
- * partnerLevel — уровень партнёра (null если не указан).
+ * Слот для записи на взаимный час: время + владелец открытого окна.
+ * {@code openSlotRequestId} — id строки {@code interview_requests} (solo PENDING, partner is null), не id из {@code interviews}.
  */
 public record AvailableSlotDto(
         LocalDateTime dateTime,
         Long partnerUserId,
         String partnerLabel,
-        Long interviewId,
+        Long openSlotRequestId,
         Level partnerLevel
 ) {
-    public AvailableSlotDto(LocalDateTime dateTime, Long partnerUserId, String partnerLabel, Long interviewId) {
-        this(dateTime, partnerUserId, partnerLabel, interviewId, null);
+    public AvailableSlotDto(LocalDateTime dateTime, Long partnerUserId, String partnerLabel, Long openSlotRequestId) {
+        this(dateTime, partnerUserId, partnerLabel, openSlotRequestId, null);
     }
 
-    /** Удобный конструктор для нового слота (не существующего интервью). */
+    /** Слот без привязки к существующей заявке (не используется в текущем списке открытых слотов). */
     public AvailableSlotDto(LocalDateTime dateTime, Long partnerUserId, String partnerLabel) {
         this(dateTime, partnerUserId, partnerLabel, null, null);
     }

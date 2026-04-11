@@ -14,6 +14,7 @@ import com.interviewpartner.bot.telegram.handler.CreateInterviewMessageHandler;
 import com.interviewpartner.bot.telegram.flow.ConversationStateService;
 import com.interviewpartner.bot.telegram.handler.CallbackQueryHandler;
 import com.interviewpartner.bot.telegram.handler.CreateInterviewCommandHandler;
+import com.interviewpartner.bot.telegram.handler.InterviewCalendarPresenter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
@@ -49,7 +50,7 @@ class CreateInterviewFlowTest {
     @BeforeEach
     void setUp() {
         telegramClient = mock(TelegramClient.class);
-        stateService = new ConversationStateService();
+        stateService = new ConversationStateService(Clock.systemUTC());
         UserService userService = mock(UserService.class);
         User mockUser = mock(User.class);
         when(mockUser.getId()).thenReturn(1L);
@@ -63,6 +64,7 @@ class CreateInterviewFlowTest {
                 interviewService,
                 userService,
                 mock(InterviewRequestService.class),
+                mock(InterviewCalendarPresenter.class),
                 Clock.systemUTC()
         );
     }

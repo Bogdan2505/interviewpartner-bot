@@ -1,8 +1,8 @@
 package com.interviewpartner.bot.repository;
 
+import com.interviewpartner.bot.model.InterviewFormat;
 import com.interviewpartner.bot.model.InterviewRequest;
 import com.interviewpartner.bot.model.InterviewRequestStatus;
-import com.interviewpartner.bot.model.InterviewFormat;
 import com.interviewpartner.bot.model.Language;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -13,13 +13,20 @@ import java.util.List;
 import java.util.Optional;
 
 public interface InterviewRequestRepository extends JpaRepository<InterviewRequest, Long> {
-    Optional<InterviewRequest> findByIdAndStatus(Long id, InterviewRequestStatus status);
 
     @Query("""
             select r from InterviewRequest r
-            join fetch r.candidate
-            join fetch r.interviewer
-            where (r.candidate.id = :userId or r.interviewer.id = :userId)
+            left join fetch r.partner
+            join fetch r.slotOwner
+            where r.id = :id and r.status = :status
+            """)
+    Optional<InterviewRequest> findByIdAndStatus(@Param("id") Long id, @Param("status") InterviewRequestStatus status);
+
+    @Query("""
+            select r from InterviewRequest r
+            left join fetch r.partner
+            join fetch r.slotOwner
+            where (r.slotOwner.id = :userId or (r.partner is not null and r.partner.id = :userId))
               and (:status is null or r.status = :status)
             order by r.dateTime desc
             """)
@@ -28,21 +35,30 @@ public interface InterviewRequestRepository extends JpaRepository<InterviewReque
 
     @Query("""
             select r from InterviewRequest r
-            join fetch r.interviewer
-            where r.candidate.id = r.interviewer.id
+            join fetch r.slotOwner
+            where r.partner is null
               and r.language = :language
               and r.status = com.interviewpartner.bot.model.InterviewRequestStatus.PENDING
               and r.dateTime > :now
-              and r.interviewer.id <> :excludeUserId
+              and r.slotOwner.id <> :excludeUserId
             order by r.dateTime asc
             """)
     List<InterviewRequest> findOpenSoloRequests(@Param("language") Language language,
                                                 @Param("excludeUserId") Long excludeUserId,
                                                 @Param("now") LocalDateTime now);
 
-    boolean existsByCandidateIdAndInterviewerIdAndLanguageAndFormatAndDateTimeAndDurationMinutesAndStatus(
-            Long candidateId,
-            Long interviewerId,
+    boolean existsBySlotOwnerIdAndPartnerIsNullAndLanguageAndFormatAndDateTimeAndDurationMinutesAndStatus(
+            Long slotOwnerId,
+            Language language,
+            InterviewFormat format,
+            LocalDateTime dateTime,
+            Integer durationMinutes,
+            InterviewRequestStatus status
+    );
+
+    boolean existsBySlotOwnerIdAndPartnerIdAndLanguageAndFormatAndDateTimeAndDurationMinutesAndStatus(
+            Long slotOwnerId,
+            Long partnerId,
             Language language,
             InterviewFormat format,
             LocalDateTime dateTime,
@@ -50,4 +66,3 @@ public interface InterviewRequestRepository extends JpaRepository<InterviewReque
             InterviewRequestStatus status
     );
 }
-

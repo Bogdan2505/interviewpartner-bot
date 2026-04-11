@@ -9,6 +9,7 @@ import com.interviewpartner.bot.config.ClockConfig;
 import com.interviewpartner.bot.model.User;
 import com.interviewpartner.bot.repository.InterviewRepository;
 import com.interviewpartner.bot.repository.UserRepository;
+import com.interviewpartner.bot.service.request.InterviewRequestServiceImpl;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
@@ -21,7 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @DataJpaTest
 @ActiveProfiles("test")
-@Import({ClockConfig.class, InterviewServiceImpl.class, UserServiceImpl.class})
+@Import({ClockConfig.class, InterviewServiceImpl.class, UserServiceImpl.class, InterviewRequestServiceImpl.class})
 class InterviewServiceJitsiUrlTest {
 
     @Autowired

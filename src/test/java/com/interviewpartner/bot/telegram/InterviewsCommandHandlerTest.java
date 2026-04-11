@@ -1,10 +1,5 @@
 package com.interviewpartner.bot.telegram;
 
-import com.interviewpartner.bot.model.Interview;
-import com.interviewpartner.bot.model.InterviewFormat;
-import com.interviewpartner.bot.model.InterviewStatus;
-import com.interviewpartner.bot.model.Language;
-import com.interviewpartner.bot.model.User;
 import com.interviewpartner.bot.service.InterviewService;
 import com.interviewpartner.bot.service.UserService;
 import com.interviewpartner.bot.telegram.handler.InterviewsCommandHandler;
@@ -15,11 +10,8 @@ import org.telegram.telegrambots.meta.api.objects.message.Message;
 import org.telegram.telegrambots.meta.generics.TelegramClient;
 
 import java.time.Clock;
-import java.time.LocalDateTime;
-import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -32,20 +24,6 @@ class InterviewsCommandHandlerTest {
         TelegramClient telegramClient = mock(TelegramClient.class);
         UserService userService = mock(UserService.class);
         InterviewService interviewService = mock(InterviewService.class);
-
-        User user = mock(User.class);
-        when(user.getId()).thenReturn(1L);
-        when(userService.registerUser(anyLong(), any())).thenReturn(user);
-
-        when(interviewService.getUserInterviews(1L, null)).thenReturn(List.of(
-                Interview.builder()
-                        .dateTime(LocalDateTime.now().plusDays(1))
-                        .language(Language.RUSSIAN)
-                        .format(InterviewFormat.TECHNICAL)
-                        .duration(60)
-                        .status(InterviewStatus.SCHEDULED)
-                        .build()
-        ));
 
         InterviewsCommandHandler handler = new InterviewsCommandHandler(userService, interviewService, Clock.systemUTC());
         Update update = mock(Update.class);

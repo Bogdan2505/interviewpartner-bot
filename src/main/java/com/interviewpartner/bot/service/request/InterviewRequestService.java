@@ -27,5 +27,16 @@ public interface InterviewRequestService {
     List<InterviewRequest> getOpenSoloRequests(Language language, Long excludeUserId, LocalDateTime now);
 
     InterviewRequest cancel(Long requestId, long actorTelegramId, LocalDateTime now);
+
+    /**
+     * Закрывает открытый solo-слот (partner was null): назначает партнёра и переводит в ACCEPTED без второй строки заявки.
+     */
+    InterviewRequest completeOpenSlotWithJoiner(Long openSlotRequestId,
+                                                Long joinerUserId,
+                                                Language language,
+                                                InterviewFormat format,
+                                                LocalDateTime dateTime,
+                                                int durationMinutes,
+                                                LocalDateTime now);
 }
 

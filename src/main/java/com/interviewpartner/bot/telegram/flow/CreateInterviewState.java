@@ -25,8 +25,8 @@ public class CreateInterviewState {
     public List<AvailableSlotDto> availableSlots;
     /** Выбранная дата при просмотре слотов по календарю. */
     public LocalDate selectedSlotDate;
-    /** Если выбирается существующий solo-слот — ID интервью для обновления вместо создания нового. */
-    public Long joinInterviewId;
+    /** Если выбирается существующий открытый слот — id заявки {@code interview_requests} (solo PENDING). */
+    public Long openSlotRequestId;
     /** Календарь слотов: месяц для отображения. */
     public int slotCalendarYear;
     public int slotCalendarMonth;

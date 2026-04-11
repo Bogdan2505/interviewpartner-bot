@@ -1,7 +1,10 @@
 package com.interviewpartner.bot.telegram.flow;
 
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.time.Clock;
+import java.time.LocalDate;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -11,7 +14,10 @@ import java.util.concurrent.ConcurrentHashMap;
  * Позже можно заменить на таблицу в БД.
  */
 @Service
+@RequiredArgsConstructor
 public class ConversationStateService {
+
+    private final Clock clock;
 
     private final Map<Long, CreateInterviewState> createInterviewStates = new ConcurrentHashMap<>();
     private final Map<Long, InterviewCalendarState> interviewCalendarStates = new ConcurrentHashMap<>();
@@ -35,7 +41,7 @@ public class ConversationStateService {
     public InterviewCalendarState startInterviewCalendar(Long chatId, Long userId) {
         var state = new InterviewCalendarState();
         state.userId = userId;
-        var now = java.time.LocalDate.now();
+        LocalDate now = LocalDate.now(clock);
         state.calendarYear = now.getYear();
         state.calendarMonth = now.getMonthValue();
         state.selectedDate = null;

@@ -24,7 +24,6 @@ import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.meta.api.methods.AnswerCallbackQuery;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageText;
-import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageReplyMarkup;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
@@ -56,10 +55,29 @@ public class CallbackQueryHandler implements BotCommandHandler {
 
     private static final DateTimeFormatter DT_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
+    /**
+     * Сообщение пользователю по {@link IllegalArgumentException} из создания заявки/собеседования
+     * (раньше любая такая ошибка при «Создать» показывалась как «время в прошлом»).
+     */
+    private static String userMessageForInterviewOrRequestCreateFailure(IllegalArgumentException e) {
+        String m = e.getMessage() == null ? "" : e.getMessage();
+        if (m.contains("must not be in the past")) {
+            return "Нельзя записаться на время в прошлом. Выберите другое время.";
+        }
+        if (m.contains("Duplicate pending")) {
+            return "Такая открытая заявка на это время уже есть. Посмотрите «Расписание» или выберите другое время.";
+        }
+        if (m.contains("conflicting interview")) {
+            return "В это время у вас или партнёра уже есть собеседование. Выберите другое время.";
+        }
+        return "Не удалось создать заявку. Выберите другое время или начните заново: /create_interview";
+    }
+
     private final ConversationStateService stateService;
     private final InterviewService interviewService;
     private final UserService userService;
     private final InterviewRequestService interviewRequestService;
+    private final InterviewCalendarPresenter interviewCalendarPresenter;
     private final Clock clock;
 
     @Override
@@ -84,6 +102,20 @@ public class CallbackQueryHandler implements BotCommandHandler {
                 return;
             }
             if ("ci:timepast".equals(safeData)) {
+                telegramClient.execute(AnswerCallbackQuery.builder()
+                        .callbackQueryId(callback.getId())
+                        .text("Это время уже прошло. Выберите другое.")
+                        .build());
+                return;
+            }
+            if ("ic:daypast".equals(safeData)) {
+                telegramClient.execute(AnswerCallbackQuery.builder()
+                        .callbackQueryId(callback.getId())
+                        .text("Прошедшие даты недоступны. Выберите сегодня или позже.")
+                        .build());
+                return;
+            }
+            if ("ic:timepast".equals(safeData)) {
                 telegramClient.execute(AnswerCallbackQuery.builder()
                         .callbackQueryId(callback.getId())
                         .text("Это время уже прошло. Выберите другое.")
@@ -187,7 +219,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
             if (slots == null) slots = List.of();
             state.availableSlots = slots;
             state.step = CreateInterviewState.Step.VIEW_SLOT_DATES;
-            LocalDate today = LocalDate.now();
+            LocalDate today = LocalDate.now(clock);
             LocalDate firstSlotDate = slots.stream()
                     .map(s -> s.dateTime().toLocalDate())
                     .min(LocalDate::compareTo)
@@ -197,8 +229,8 @@ public class CallbackQueryHandler implements BotCommandHandler {
             state.slotCalendarMonth = firstSlotDate.getMonthValue();
             telegramClient.execute(SendMessage.builder()
                     .chatId(chatId)
-                    .text("Выберите день в календаре (✓ — есть слоты). Затем выберите время.")
-                    .replyMarkup(slotCalendarKeyboard(slots, state.slotCalendarYear, state.slotCalendarMonth))
+                    .text("Выберите день в календаре (" + TelegramScheduleUi.DAY_HAS_ACTIVITY + " — есть слоты). Затем выберите время.")
+                    .replyMarkup(slotCalendarKeyboard(slots, state.slotCalendarYear, state.slotCalendarMonth, clock))
                     .build());
             return;
         }
@@ -213,25 +245,25 @@ public class CallbackQueryHandler implements BotCommandHandler {
             telegramClient.execute(SendMessage.builder()
                     .chatId(chatId)
                     .text("Выберите день:")
-                    .replyMarkup(slotCalendarKeyboard(slots, state.slotCalendarYear, state.slotCalendarMonth))
+                    .replyMarkup(slotCalendarKeyboard(slots, state.slotCalendarYear, state.slotCalendarMonth, clock))
                     .build());
             return;
         }
         if (data.startsWith("ci:slotdate:")) {
             String dateStr = data.substring("ci:slotdate:".length());
             LocalDate picked = LocalDate.parse(dateStr);
-            if (picked.isBefore(LocalDate.now())) {
+            if (picked.isBefore(LocalDate.now(clock))) {
                 telegramClient.execute(SendMessage.builder()
                         .chatId(chatId)
                         .text("Нельзя выбрать дату в прошлом. Выберите сегодня или позже.")
-                        .replyMarkup(slotCalendarKeyboard(state.availableSlots != null ? state.availableSlots : List.of(), state.slotCalendarYear, state.slotCalendarMonth))
+                        .replyMarkup(slotCalendarKeyboard(state.availableSlots != null ? state.availableSlots : List.of(), state.slotCalendarYear, state.slotCalendarMonth, clock))
                         .build());
                 return;
             }
             state.selectedSlotDate = picked;
             String dayLabel = state.selectedSlotDate.format(DATE_BTN) + " (" + DAY_NAMES_RU[state.selectedSlotDate.getDayOfWeek().getValue() - 1] + ")";
 
-            Map<Integer, CalendarRoleType> busyHours = buildBusyHoursForDate(state.candidateUserId, state.selectedSlotDate);
+            Map<Integer, EnumSet<InterviewRequestStatus>> busyStatuses = buildBusyStatusesForDate(state.candidateUserId, state.selectedSlotDate);
 
             // Часы, в которые есть доступный партнёр
             Set<Integer> availableHours = (state.availableSlots == null ? List.<AvailableSlotDto>of() : state.availableSlots)
@@ -243,16 +275,13 @@ public class CallbackQueryHandler implements BotCommandHandler {
             state.step = CreateInterviewState.Step.VIEW_SLOTS;
 
             StringBuilder legend = new StringBuilder();
-            if (!availableHours.isEmpty()) legend.append("\n✓ — есть открытый слот другого участника");
-            if (!busyHours.isEmpty()) {
-                legend.append("\n").append(ROLE_CANDIDATE).append(" — в 1-й половине часа вы «кандидат»")
-                        .append("  ").append(ROLE_INTERVIEWER).append(" — в 1-й половине вы «интервьюер»");
-            }
+            if (!availableHours.isEmpty()) legend.append(TelegramScheduleUi.legendOpenPartnerSlot());
+            if (!busyStatuses.isEmpty()) legend.append(TelegramScheduleUi.legendRequestAndConfirmed());
 
             telegramClient.execute(SendMessage.builder()
                     .chatId(chatId)
                     .text(dayLabel + (legend.length() > 0 ? legend.toString() : ""))
-                    .replyMarkup(createInterviewTimePickerKeyboard(state.selectedSlotDate, busyHours, availableHours, LocalDateTime.now(clock)))
+                    .replyMarkup(createInterviewTimePickerKeyboard(state.selectedSlotDate, busyStatuses, availableHours, LocalDateTime.now(clock)))
                     .build());
             return;
         }
@@ -271,7 +300,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
             if (hour < 0 || hour > 23) return;
             LocalDateTime chosen = date.atTime(hour, 0);
             if (chosen.isBefore(LocalDateTime.now(clock))) {
-                Map<Integer, CalendarRoleType> busyHours = buildBusyHoursForDate(state.candidateUserId, date);
+                Map<Integer, EnumSet<InterviewRequestStatus>> busyStatuses = buildBusyStatusesForDate(state.candidateUserId, date);
                 Set<Integer> availableHours = (state.availableSlots == null ? List.<AvailableSlotDto>of() : state.availableSlots)
                         .stream()
                         .filter(s -> s.dateTime().toLocalDate().equals(date))
@@ -280,7 +309,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
                 telegramClient.execute(SendMessage.builder()
                         .chatId(chatId)
                         .text("Это время уже прошло. Выберите другое.")
-                        .replyMarkup(createInterviewTimePickerKeyboard(date, busyHours, availableHours, LocalDateTime.now(clock)))
+                        .replyMarkup(createInterviewTimePickerKeyboard(date, busyStatuses, availableHours, LocalDateTime.now(clock)))
                         .build());
                 return;
             }
@@ -295,12 +324,12 @@ public class CallbackQueryHandler implements BotCommandHandler {
                             .findFirst().orElse(null);
 
             if (matchedSlot != null) {
-                state.joinInterviewId = matchedSlot.interviewId();
+                state.openSlotRequestId = matchedSlot.openSlotRequestId();
                 state.interviewerUserId = matchedSlot.partnerUserId();
                 state.step = CreateInterviewState.Step.CONFIRM;
                 String partnerLabel = matchedSlot.partnerLabel()
                         + (matchedSlot.partnerLevel() != null ? " [" + levelLabel(matchedSlot.partnerLevel()) + "]" : "");
-                boolean joining = state.joinInterviewId != null;
+                boolean joining = state.openSlotRequestId != null;
                 String summary = (joining ? "Записаться на взаимный час?\n" : "Подтвердить создание открытого слота?\n")
                         + "Язык: " + state.language + "\n"
                         + (state.level != null ? "Грейд: " + levelLabel(state.level) + "\n" : "")
@@ -313,13 +342,13 @@ public class CallbackQueryHandler implements BotCommandHandler {
                         .replyMarkup(confirmKeyboard(joining))
                         .build());
             } else {
-                // Нет готового слота — открытый часовой слот (создатель = интервьюер первой половины)
+                // Нет готового слота — открытый часовой слот (после записи партнёра станет согласованным собеседованием)
                 state.interviewerUserId = state.candidateUserId;
                 state.step = CreateInterviewState.Step.CONFIRM;
                 String summary = "Пока никто не открыл это время. Создать открытый часовой слот на "
                         + DT_FORMAT.format(state.dateTime) + " (" + state.language + ")"
                         + (state.level != null ? " [" + levelLabel(state.level) + "]" : "") + "?\n"
-                        + "Вы будете интервьюером первой половины часа, когда кто-то запишется.";
+                        + "Когда партнёр запишется, в календаре это отобразится как согласованное собеседование (" + TelegramScheduleUi.CONFIRMED_ICON + ").";
                 telegramClient.execute(SendMessage.builder()
                         .chatId(chatId)
                         .text(summary)
@@ -333,13 +362,13 @@ public class CallbackQueryHandler implements BotCommandHandler {
             String payload = data.substring("ci:slot:".length());
             if ("manual".equals(payload)) {
                 state.step = CreateInterviewState.Step.VIEW_SLOT_DATES;
-                var now = LocalDate.now();
-                state.slotCalendarYear = now.getYear();
-                state.slotCalendarMonth = now.getMonthValue();
+                LocalDate nowDate = LocalDate.now(clock);
+                state.slotCalendarYear = nowDate.getYear();
+                state.slotCalendarMonth = nowDate.getMonthValue();
                 telegramClient.execute(SendMessage.builder()
                         .chatId(chatId)
                         .text("Выберите день в календаре, затем время:")
-                        .replyMarkup(slotCalendarKeyboard(state.availableSlots != null ? state.availableSlots : List.of(), state.slotCalendarYear, state.slotCalendarMonth))
+                        .replyMarkup(slotCalendarKeyboard(state.availableSlots != null ? state.availableSlots : List.of(), state.slotCalendarYear, state.slotCalendarMonth, clock))
                         .build());
                 return;
             }
@@ -349,7 +378,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
                 telegramClient.execute(SendMessage.builder()
                         .chatId(chatId)
                         .text("Выберите день в календаре:")
-                        .replyMarkup(slotCalendarKeyboard(slots, state.slotCalendarYear, state.slotCalendarMonth))
+                        .replyMarkup(slotCalendarKeyboard(slots, state.slotCalendarYear, state.slotCalendarMonth, clock))
                         .build());
                 return;
             }
@@ -365,13 +394,13 @@ public class CallbackQueryHandler implements BotCommandHandler {
                 telegramClient.execute(SendMessage.builder()
                         .chatId(chatId)
                         .text("Этот слот уже в прошлом. Выберите другое время.")
-                        .replyMarkup(slotCalendarKeyboard(state.availableSlots, state.slotCalendarYear, state.slotCalendarMonth))
+                        .replyMarkup(slotCalendarKeyboard(state.availableSlots, state.slotCalendarYear, state.slotCalendarMonth, clock))
                         .build());
                 return;
             }
             state.dateTime = slot.dateTime();
             state.durationMinutes = 60;
-            state.joinInterviewId = slot.interviewId();
+            state.openSlotRequestId = slot.openSlotRequestId();
             state.interviewerUserId = slot.partnerUserId();
             state.step = CreateInterviewState.Step.CONFIRM;
             String slotPartnerLabel = slot.partnerLabel()
@@ -421,44 +450,19 @@ public class CallbackQueryHandler implements BotCommandHandler {
             }
             if (action.equals("yes")) {
                 try {
-                    if (state.joinInterviewId != null) {
-                        Long myId = state.candidateUserId;
-                        Long creatorId = state.interviewerUserId;
-                        User joiner = userService.getUserById(myId);
-                        User creator = userService.getUserById(creatorId);
-                        InterviewRequest request = interviewRequestService.createRequest(
-                                myId,
-                                creatorId,
+                    if (state.openSlotRequestId != null) {
+                        String levelInfo = state.level != null ? "\nГрейд: " + levelLabel(state.level) : "";
+                        bookOpenSlotAndNotify(
+                                chatId,
+                                state.candidateUserId,
+                                state.interviewerUserId,
                                 state.language,
                                 state.format,
                                 state.dateTime,
-                                state.durationMinutes
-                        );
-
-                        String creatorLabel = creator.getUsername() != null ? "@" + creator.getUsername() : "пользователь #" + creatorId;
-                        String joinerLabel = joiner.getUsername() != null ? "@" + joiner.getUsername() : "пользователь #" + myId;
-                        String dtStr = DT_FORMAT.format(state.dateTime);
-
-                        String levelInfo = state.level != null ? "\nГрейд: " + levelLabel(state.level) : "";
-
-                        telegramClient.execute(SendMessage.builder()
-                                .chatId(chatId)
-                                .text("Заявка отправлена интервьюеру.\n"
-                                        + "Старт: " + dtStr + "\n"
-                                        + "Язык: " + state.language
-                                        + levelInfo + "\n"
-                                        + "Партнёр (создатель слота): " + creatorLabel)
-                                .build());
-
-                        telegramClient.execute(SendMessage.builder()
-                                .chatId(creator.getTelegramId())
-                                .text("Новая заявка к вашему слоту.\n"
-                                        + "Старт: " + dtStr + "\n"
-                                        + "Язык: " + state.language
-                                        + levelInfo + "\n"
-                                        + "Партнёр: " + joinerLabel)
-                                .replyMarkup(requestKeyboard(request.getId()))
-                                .build());
+                                state.durationMinutes,
+                                levelInfo,
+                                state.openSlotRequestId,
+                                telegramClient);
                     } else {
                         boolean solo = state.candidateUserId.equals(state.interviewerUserId);
                         if (solo) {
@@ -470,7 +474,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
                                     state.dateTime,
                                     state.durationMinutes);
                             telegramClient.execute(SendMessage.builder().chatId(chatId)
-                                    .text("Открытая заявка создана. Когда кто-то отправит запрос на этот слот — вы получите подтверждение.")
+                                    .text("Открытая заявка создана. Когда кто-то запишется на слот, вы получите уведомление, собеседование создастся автоматически.")
                                     .build());
                         } else {
                             InterviewRequest request = interviewRequestService.createRequest(
@@ -510,13 +514,14 @@ public class CallbackQueryHandler implements BotCommandHandler {
                             .build());
                 } catch (IllegalArgumentException e) {
                     telegramClient.execute(SendMessage.builder().chatId(chatId)
-                            .text("Нельзя записаться на время в прошлом. Выберите другое время.").build());
+                            .text(userMessageForInterviewOrRequestCreateFailure(e))
+                            .build());
                     state.step = CreateInterviewState.Step.VIEW_SLOT_DATES;
                     List<AvailableSlotDto> slots = state.availableSlots != null ? state.availableSlots : List.of();
                     telegramClient.execute(SendMessage.builder()
                             .chatId(chatId)
                             .text("Выберите день в календаре:")
-                            .replyMarkup(slotCalendarKeyboard(slots, state.slotCalendarYear, state.slotCalendarMonth))
+                            .replyMarkup(slotCalendarKeyboard(slots, state.slotCalendarYear, state.slotCalendarMonth, clock))
                             .build());
                 } catch (UserNotFoundException e) {
                     telegramClient.execute(SendMessage.builder().chatId(chatId).text("Ошибка: пользователь не найден. Начните заново: /create_interview").build());
@@ -578,10 +583,10 @@ public class CallbackQueryHandler implements BotCommandHandler {
 
     private static final int QUICK_SLOTS_MAX = 12;
 
-    private static InlineKeyboardMarkup slotCalendarKeyboard(List<AvailableSlotDto> slots, int year, int month) {
+    private static InlineKeyboardMarkup slotCalendarKeyboard(List<AvailableSlotDto> slots, int year, int month, Clock clock) {
         if (slots == null) slots = List.of();
         Set<LocalDate> datesWithSlots = slots.stream().map(s -> s.dateTime().toLocalDate()).collect(Collectors.toSet());
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(clock);
         YearMonth ym = YearMonth.of(year, month);
         YearMonth minYm = YearMonth.from(today);
         List<InlineKeyboardRow> rows = new ArrayList<>();
@@ -617,7 +622,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
             if (pastDay) {
                 label = String.valueOf(day);
             } else if (hasSlots) {
-                label = day + "✓";
+                label = day + TelegramScheduleUi.DAY_HAS_ACTIVITY;
             } else {
                 label = String.valueOf(day);
             }
@@ -658,27 +663,28 @@ public class CallbackQueryHandler implements BotCommandHandler {
     private static final int TIME_PICKER_END_HOUR = 22;
 
     private static InlineKeyboardMarkup createInterviewTimePickerKeyboard(
-            LocalDate date, Map<Integer, CalendarRoleType> busyHours, Set<Integer> availableHours, LocalDateTime now) {
+            LocalDate date, Map<Integer, EnumSet<InterviewRequestStatus>> busyStatuses, Set<Integer> availableHours, LocalDateTime now) {
         List<InlineKeyboardRow> rows = new ArrayList<>();
         List<InlineKeyboardButton> row = new ArrayList<>();
         for (int hour = TIME_PICKER_START_HOUR; hour < TIME_PICKER_END_HOUR; hour++) {
             LocalDateTime slotAt = date.atTime(hour, 0);
             boolean past = slotAt.isBefore(now);
-            CalendarRoleType busy = busyHours != null ? busyHours.get(hour) : null;
+            EnumSet<InterviewRequestStatus> busy = busyStatuses != null
+                    ? busyStatuses.getOrDefault(hour, EnumSet.noneOf(InterviewRequestStatus.class))
+                    : EnumSet.noneOf(InterviewRequestStatus.class);
             String timeStr = LocalTime.of(hour, 0).format(TIME_LABEL);
             String label;
             String callback;
             if (past) {
                 label = timeStr;
                 callback = "ci:timepast";
-            } else if (busy == CalendarRoleType.CANDIDATE) {
-                label = timeStr + " " + ROLE_CANDIDATE;
-                callback = "ci:noop";
-            } else if (busy == CalendarRoleType.INTERVIEWER) {
-                label = timeStr + " " + ROLE_INTERVIEWER;
+            } else if (!busy.isEmpty()) {
+                StringBuilder lb = new StringBuilder(timeStr);
+                TelegramScheduleUi.appendDominantInterviewStatusIcon(lb, busy);
+                label = lb.toString();
                 callback = "ci:noop";
             } else if (availableHours != null && availableHours.contains(hour)) {
-                label = timeStr + " ✓";
+                label = timeStr + " " + TelegramScheduleUi.DAY_HAS_ACTIVITY;
                 callback = "ci:time:" + date + ":" + hour;
             } else {
                 label = timeStr;
@@ -722,6 +728,84 @@ public class CallbackQueryHandler implements BotCommandHandler {
         return InlineKeyboardMarkup.builder().keyboard(rows).build();
     }
 
+    /**
+     * Запись на открытый слот: заявка сразу принимается от имени владельца слота, создаётся собеседование,
+     * оба получают уведомление (без кнопок «Принять / Отклонить»).
+     */
+    private void bookOpenSlotAndNotify(
+            Long joinerChatId,
+            Long candidateUserId,
+            Long interviewerUserId,
+            Language language,
+            InterviewFormat format,
+            LocalDateTime dateTime,
+            int durationMinutes,
+            String levelInfoExtra,
+            Long openSlotRequestId,
+            TelegramClient telegramClient) throws TelegramApiException {
+        User joiner = userService.getUserById(candidateUserId);
+        User creator = userService.getUserById(interviewerUserId);
+        if (joiner == null || creator == null) {
+            throw new UserNotFoundException("Joiner or slot owner not found");
+        }
+        Long creatorTg = creator.getTelegramId();
+        if (creatorTg == null) {
+            throw new IllegalArgumentException("Interview slot owner has no telegram id");
+        }
+        InterviewRequest accepted;
+        if (openSlotRequestId != null) {
+            accepted = interviewRequestService.completeOpenSlotWithJoiner(
+                    openSlotRequestId,
+                    candidateUserId,
+                    language,
+                    format,
+                    dateTime,
+                    durationMinutes,
+                    LocalDateTime.now(clock));
+        } else {
+            InterviewRequest request = interviewRequestService.createRequest(
+                    candidateUserId, interviewerUserId, language, format, dateTime, durationMinutes);
+            accepted = interviewRequestService.accept(request.getId(), creatorTg, LocalDateTime.now(clock));
+        }
+
+        Interview created = interviewService.createInterview(
+                accepted.getPartner().getId(),
+                accepted.getSlotOwner().getId(),
+                accepted.getLanguage(),
+                null,
+                accepted.getFormat(),
+                accepted.getDateTime(),
+                accepted.getDurationMinutes(),
+                true);
+        Interview forVideo = interviewService.getInterviewWithParticipants(created.getId());
+        String meetingLinkBlock = videoMeetingBlock(forVideo);
+        String dtStr = DT_FORMAT.format(dateTime);
+        String creatorLabel = creator.getUsername() != null ? "@" + creator.getUsername() : "пользователь #" + interviewerUserId;
+        String joinerLabel = joiner.getUsername() != null ? "@" + joiner.getUsername() : "пользователь #" + candidateUserId;
+
+        telegramClient.execute(SendMessage.builder()
+                .chatId(joinerChatId)
+                .text("Запись подтверждена. Собеседование создано.\n"
+                        + "Старт: " + dtStr + "\n"
+                        + "Язык: " + language
+                        + levelInfoExtra + "\n"
+                        + "Партнёр: " + creatorLabel
+                        + meetingLinkBlock)
+                .replyMarkup(ChatMenuKeyboardBuilder.buildPersistentKeyboard())
+                .build());
+
+        telegramClient.execute(SendMessage.builder()
+                .chatId(creatorTg)
+                .text("К вашему слоту записался партнёр.\n"
+                        + "Старт: " + dtStr + "\n"
+                        + "Язык: " + language
+                        + levelInfoExtra + "\n"
+                        + "Партнёр: " + joinerLabel
+                        + meetingLinkBlock)
+                .replyMarkup(ChatMenuKeyboardBuilder.buildPersistentKeyboard())
+                .build());
+    }
+
     private void handleInterviewRequestCallback(
             Long chatId,
             String data,
@@ -752,12 +836,16 @@ public class CallbackQueryHandler implements BotCommandHandler {
                 var req = interviewRequestService.decline(requestId, actorTelegramId, LocalDateTime.now(clock));
                 telegramClient.execute(SendMessage.builder().chatId(chatId).text("Ок, отклонил.").build());
                 sendMainMenu(chatId, telegramClient);
-                User candidate = userService.getUserById(req.getCandidate().getId());
-                telegramClient.execute(SendMessage.builder()
-                        .chatId(candidate.getTelegramId())
-                        .text("Партнёр отклонил запрос на собеседование.")
-                        .replyMarkup(ChatMenuKeyboardBuilder.buildPersistentKeyboard())
-                        .build());
+                if (req.getPartner() != null) {
+                    User applicant = userService.getUserById(req.getPartner().getId());
+                    if (applicant.getTelegramId() != null) {
+                        telegramClient.execute(SendMessage.builder()
+                                .chatId(applicant.getTelegramId())
+                                .text("Партнёр отклонил запрос на собеседование.")
+                                .replyMarkup(ChatMenuKeyboardBuilder.buildPersistentKeyboard())
+                                .build());
+                    }
+                }
             } catch (InterviewRequestForbiddenException e) {
                 telegramClient.execute(SendMessage.builder().chatId(chatId)
                         .text("Отклонить заявку может только приглашённый интервьюер.")
@@ -790,8 +878,8 @@ public class CallbackQueryHandler implements BotCommandHandler {
             }
             try {
                 Interview created = interviewService.createInterview(
-                        req.getCandidate().getId(),
-                        req.getInterviewer().getId(),
+                        req.getPartner().getId(),
+                        req.getSlotOwner().getId(),
                         req.getLanguage(),
                         null,
                         req.getFormat(),
@@ -803,9 +891,9 @@ public class CallbackQueryHandler implements BotCommandHandler {
                 String meetingLinkBlock = videoMeetingBlock(forVideo);
                 telegramClient.execute(SendMessage.builder().chatId(chatId).text("Принято. Собеседование создано." + meetingLinkBlock).build());
                 sendMainMenu(chatId, telegramClient);
-                User candidate = userService.getUserById(req.getCandidate().getId());
+                User applicant = userService.getUserById(req.getPartner().getId());
                 telegramClient.execute(SendMessage.builder()
-                        .chatId(candidate.getTelegramId())
+                        .chatId(applicant.getTelegramId())
                         .text("Партнёр принял запрос. Собеседование создано на " + DT_FORMAT.format(req.getDateTime()) + "." + meetingLinkBlock)
                         .replyMarkup(ChatMenuKeyboardBuilder.buildPersistentKeyboard())
                         .build());
@@ -821,24 +909,29 @@ public class CallbackQueryHandler implements BotCommandHandler {
         }
     }
 
-    private enum CalendarRoleType {
-        CANDIDATE,
-        INTERVIEWER
+    /**
+     * В деталях часа расписания: при наличии согласования не показываем устаревшую PENDING на тот же час.
+     */
+    private static List<InterviewRequest> compactHourDetailsHidePendingWhenAccepted(List<InterviewRequest> bookedList) {
+        if (bookedList == null || bookedList.isEmpty()) {
+            return bookedList == null ? List.of() : bookedList;
+        }
+        boolean hasAccepted = bookedList.stream().anyMatch(r -> r.getStatus() == InterviewRequestStatus.ACCEPTED);
+        if (!hasAccepted) {
+            return bookedList;
+        }
+        return bookedList.stream()
+                .filter(r -> r.getStatus() != InterviewRequestStatus.PENDING)
+                .toList();
     }
 
-    private static final String ROLE_CANDIDATE = "🧑‍💻";
-    private static final String ROLE_INTERVIEWER = "🧑‍🏫";
-    private static final String ROLE_CANDIDATE_CALENDAR = ROLE_CANDIDATE;
-    private static final String ROLE_INTERVIEWER_CALENDAR = ROLE_INTERVIEWER;
-    private static final String CALENDAR_LABEL_PAD = "\u00A0";
-
     /**
-     * Возвращает Map<hour, role> для занятых слотов пользователя в указанный день.
+     * Часы, где у пользователя уже есть заявка или согласованное собеседование (по статусу).
      */
-    private Map<Integer, CalendarRoleType> buildBusyHoursForDate(Long userId, LocalDate date) {
+    private Map<Integer, EnumSet<InterviewRequestStatus>> buildBusyStatusesForDate(Long userId, LocalDate date) {
         if (userId == null) return Map.of();
         List<InterviewRequest> requests = interviewRequestService.getUserRequests(userId, null);
-        Map<Integer, CalendarRoleType> busy = new java.util.HashMap<>();
+        Map<Integer, EnumSet<InterviewRequestStatus>> busy = new java.util.HashMap<>();
         for (InterviewRequest i : requests) {
             if (i.getStatus() == InterviewRequestStatus.DECLINED
                     || i.getStatus() == InterviewRequestStatus.CANCELLED) {
@@ -847,7 +940,8 @@ public class CallbackQueryHandler implements BotCommandHandler {
             if (i.getDateTime() == null || !i.getDateTime().toLocalDate().equals(date)) {
                 continue;
             }
-            busy.put(i.getDateTime().getHour(), resolveUserRole(i, userId));
+            busy.computeIfAbsent(i.getDateTime().getHour(), h -> EnumSet.noneOf(InterviewRequestStatus.class))
+                    .add(i.getStatus());
         }
         return busy;
     }
@@ -885,20 +979,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
             return;
         }
 
-        if (data.equals("ic:menu")) {
-            state.filter = null;
-            state.selectedDate = null;
-            showScheduleFilterMenu(chatId, messageId, telegramClient);
-            return;
-        }
-
-        if (data.startsWith("ic:filter:")) {
-            String filterStr = data.substring("ic:filter:".length());
-            try {
-                state.filter = InterviewCalendarState.ScheduleFilter.valueOf(filterStr);
-            } catch (IllegalArgumentException e) {
-                return;
-            }
+        if (data.equals("ic:menu") || data.startsWith("ic:filter:")) {
             state.selectedDate = null;
             showInterviewCalendarMonth(chatId, messageId, state, telegramClient);
             return;
@@ -940,15 +1021,22 @@ public class CallbackQueryHandler implements BotCommandHandler {
                         .findFirst()
                         .orElseThrow(() -> new IllegalArgumentException("Request not found"));
                 User actor = userService.getUserByTelegramId(fromUser.getId());
+                if (actor == null) {
+                    telegramClient.execute(SendMessage.builder().chatId(chatId).text("Пользователь не найден.").build());
+                    return;
+                }
                 InterviewRequest cancelled = interviewRequestService.cancel(requestId, fromUser.getId(), LocalDateTime.now(clock));
                 boolean wasAccepted = before.getStatus() == InterviewRequestStatus.ACCEPTED;
                 if (wasAccepted) {
                     findScheduledInterviewByRequest(cancelled)
                             .ifPresent(i -> interviewService.cancelInterview(i.getId()));
                 }
-                User partner = java.util.Objects.equals(before.getCandidate().getId(), actor.getId())
-                        ? before.getInterviewer()
-                        : before.getCandidate();
+                User partner;
+                if (java.util.Objects.equals(before.getSlotOwner().getId(), actor.getId())) {
+                    partner = before.getPartner();
+                } else {
+                    partner = before.getSlotOwner();
+                }
                 if (partner != null && partner.getTelegramId() != null) {
                     String title = wasAccepted
                             ? "Партнёр отменил согласованное собеседование."
@@ -973,28 +1061,27 @@ public class CallbackQueryHandler implements BotCommandHandler {
             LocalDate day = LocalDate.parse(dateStr);
             state.selectedDate = day;
 
+            LocalDate today = LocalDate.now(clock);
             List<InterviewRequest> scheduled = interviewRequestService.getUserRequests(state.userId, null);
             List<InterviewRequest> forDay = scheduled.stream()
+                    .filter(i -> !i.getDateTime().toLocalDate().isBefore(today))
                     .filter(i -> i.getDateTime().toLocalDate().equals(day))
-                    .filter(i -> scheduleFilterMatches(i, state.filter))
+                    .filter(i -> i.getStatus() != InterviewRequestStatus.DECLINED
+                            && i.getStatus() != InterviewRequestStatus.CANCELLED)
                     .sorted(java.util.Comparator.comparing(InterviewRequest::getDateTime))
                     .toList();
-            Map<Integer, EnumSet<CalendarRoleType>> hourRoles = new java.util.HashMap<>();
+            Map<Integer, EnumSet<InterviewRequestStatus>> hourStatuses = new java.util.HashMap<>();
             for (InterviewRequest i : forDay) {
                 int hour = i.getDateTime().getHour();
-                EnumSet<CalendarRoleType> roles = hourRoles.computeIfAbsent(hour, h -> EnumSet.noneOf(CalendarRoleType.class));
-                roles.add(resolveUserRole(i, state.userId));
+                EnumSet<InterviewRequestStatus> statuses = hourStatuses.computeIfAbsent(hour, h -> EnumSet.noneOf(InterviewRequestStatus.class));
+                statuses.add(i.getStatus());
             }
 
             java.time.format.DateTimeFormatter df = java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy");
-            String sectionTitle = scheduleFilterSectionName(state.filter);
-            String legend = hourRoles.isEmpty() ? ""
-                    : (state.filter == InterviewCalendarState.ScheduleFilter.PENDING
-                        ? "\n\n" + ROLE_INTERVIEWER + " — открытый слот, ждёте партнёра   " + ROLE_CANDIDATE + " — открытый слот (старые записи)"
-                        : "\n\n" + ROLE_CANDIDATE + " — 1-я половина часа: вы «кандидат»   " + ROLE_INTERVIEWER + " — 1-я половина: вы «интервьюер»");
-            String title = sectionTitle + " — " + day.format(df) + " (" + formatDayOfWeekRu(day.getDayOfWeek()) + ")" + legend;
+            String legend = hourStatuses.isEmpty() ? "" : TelegramScheduleUi.legendRequestAndConfirmed();
+            String title = "Расписание — " + day.format(df) + " (" + formatDayOfWeekRu(day.getDayOfWeek()) + ")" + legend;
 
-            InlineKeyboardMarkup keyboard = timePickerKeyboard(day, hourRoles);
+            InlineKeyboardMarkup keyboard = timePickerKeyboard(day, hourStatuses, LocalDateTime.now(clock));
 
             if (messageId != null) {
                 try {
@@ -1034,13 +1121,17 @@ public class CallbackQueryHandler implements BotCommandHandler {
                 return;
             }
 
+            LocalDate today = LocalDate.now(clock);
             List<InterviewRequest> scheduled = interviewRequestService.getUserRequests(state.userId, null);
             List<InterviewRequest> bookedList = scheduled.stream()
+                    .filter(i -> !i.getDateTime().toLocalDate().isBefore(today))
                     .filter(i -> i.getDateTime().toLocalDate().equals(day))
                     .filter(i -> i.getDateTime().getHour() == hour)
-                    .filter(i -> scheduleFilterMatches(i, state.filter))
+                    .filter(i -> i.getStatus() != InterviewRequestStatus.DECLINED
+                            && i.getStatus() != InterviewRequestStatus.CANCELLED)
                     .sorted(java.util.Comparator.comparing(InterviewRequest::getDateTime))
                     .toList();
+            bookedList = compactHourDetailsHidePendingWhenAccepted(bookedList);
 
             String text;
             InlineKeyboardMarkup markup;
@@ -1053,23 +1144,17 @@ public class CallbackQueryHandler implements BotCommandHandler {
                 for (InterviewRequest booked : bookedList) {
                     String time = booked.getDateTime().format(timeFmt);
                     if (sb.length() > 0) sb.append("\n\n");
-                    if (state.filter == InterviewCalendarState.ScheduleFilter.PENDING) {
-                        sb.append("заявка ожидает решения, ").append(booked.getLanguage())
-                                .append(", ").append(booked.getDurationMinutes()).append(" мин, старт ").append(time);
-                    } else {
-                        boolean isCandidate = resolveUserRole(booked, state.userId) == CalendarRoleType.CANDIDATE;
-                        String youAction = isCandidate
-                                ? "1-я половина: вы «кандидат»"
-                                : "1-я половина: вы «интервьюер»";
-                        User partner = isCandidate ? booked.getInterviewer() : booked.getCandidate();
-                        String partnerLabel = (partner != null && partner.getUsername() != null)
-                                ? "@" + partner.getUsername()
-                                : (partner != null ? "пользователь #" + partner.getId() : "—");
-                        sb.append(youAction).append(", партнёр: ").append(partnerLabel)
-                                .append("\n").append(booked.getLanguage())
-                                .append(", ").append(booked.getFormat())
-                                .append(", ").append(booked.getDurationMinutes()).append(" мин, старт ").append(time);
-                    }
+                    User partner = schedulePartnerForViewer(booked, state.userId);
+                    String partnerLabel = (partner != null && partner.getUsername() != null)
+                            ? "@" + partner.getUsername()
+                            : (partner != null ? "пользователь #" + partner.getId() : "—");
+                    sb.append(TelegramScheduleUi.scheduleRequestDetailsLines(
+                            booked.getStatus(),
+                            partnerLabel,
+                            booked.getLanguage(),
+                            booked.getFormat(),
+                            booked.getDurationMinutes(),
+                            time));
                 }
                 text = sb.toString();
                 markup = timeDetailsKeyboard(day, bookedList);
@@ -1102,37 +1187,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
     }
 
     private void showInterviewCalendarMonth(Long chatId, Integer messageId, InterviewCalendarState state, TelegramClient telegramClient) throws TelegramApiException {
-        int year = state.calendarYear;
-        int month = state.calendarMonth;
-        Long userId = state.userId;
-        List<InterviewRequest> scheduled = interviewRequestService.getUserRequests(userId, null);
-        InlineKeyboardMarkup keyboard = calendarMonthKeyboard(year, month, userId, scheduled, state.filter);
-
-        String sectionTitle = scheduleFilterSectionName(state.filter);
-        String text = sectionTitle + " — " + MONTH_NAMES_RU[month - 1] + " " + year + ".\nВыберите день.";
-
-        if (messageId != null) {
-            try {
-                telegramClient.execute(EditMessageText.builder()
-                        .chatId(chatId)
-                        .messageId(messageId)
-                        .text(text)
-                        .replyMarkup(keyboard)
-                        .build());
-            } catch (TelegramApiException e) {
-                telegramClient.execute(SendMessage.builder()
-                        .chatId(chatId)
-                        .text(text)
-                        .replyMarkup(keyboard)
-                        .build());
-            }
-        } else {
-            telegramClient.execute(SendMessage.builder()
-                    .chatId(chatId)
-                    .text(text)
-                    .replyMarkup(keyboard)
-                    .build());
-        }
+        interviewCalendarPresenter.sendMonthView(chatId, messageId, state, telegramClient);
     }
 
     private InlineKeyboardMarkup dayBackKeyboard() {
@@ -1145,106 +1200,41 @@ public class CallbackQueryHandler implements BotCommandHandler {
                 .build();
     }
 
-    private InlineKeyboardMarkup calendarMonthKeyboard(int year, int month, Long userId, List<InterviewRequest> scheduled, InterviewCalendarState.ScheduleFilter filter) {
-        YearMonth ym = YearMonth.of(year, month);
-
-        Map<LocalDate, EnumSet<CalendarRoleType>> rolesByDate = new java.util.HashMap<>();
-        for (InterviewRequest i : scheduled) {
-            if (i.getDateTime() == null) continue;
-            if (!scheduleFilterMatches(i, filter)) continue;
-            LocalDate d = i.getDateTime().toLocalDate();
-            if (d.getYear() != year || d.getMonthValue() != month) continue;
-
-            rolesByDate.computeIfAbsent(d, k -> EnumSet.noneOf(CalendarRoleType.class));
-            rolesByDate.get(d).add(resolveUserRole(i, userId));
-        }
-
-        List<InlineKeyboardRow> rows = new ArrayList<>();
-        String monthTitle = MONTH_NAMES_RU[month - 1] + " " + year;
-
-        YearMonth prev = ym.minusMonths(1);
-        YearMonth next = ym.plusMonths(1);
-        rows.add(new InlineKeyboardRow(
-                InlineKeyboardButton.builder().text("◀").callbackData("ic:calnav:" + prev.getYear() + "-" + prev.getMonthValue()).build(),
-                InlineKeyboardButton.builder().text(monthTitle).callbackData("ic:noop").build(),
-                InlineKeyboardButton.builder().text("▶").callbackData("ic:calnav:" + next.getYear() + "-" + next.getMonthValue()).build()
-        ));
-
-        rows.add(new InlineKeyboardRow(
-                InlineKeyboardButton.builder().text("Пн").callbackData("ic:noop").build(),
-                InlineKeyboardButton.builder().text("Вт").callbackData("ic:noop").build(),
-                InlineKeyboardButton.builder().text("Ср").callbackData("ic:noop").build(),
-                InlineKeyboardButton.builder().text("Чт").callbackData("ic:noop").build(),
-                InlineKeyboardButton.builder().text("Пт").callbackData("ic:noop").build(),
-                InlineKeyboardButton.builder().text("Сб").callbackData("ic:noop").build(),
-                InlineKeyboardButton.builder().text("Вс").callbackData("ic:noop").build()
-        ));
-
-        int firstDay = ym.atDay(1).getDayOfWeek().getValue();
-        int len = ym.lengthOfMonth();
-        List<InlineKeyboardButton> week = new ArrayList<>();
-        for (int i = 1; i < firstDay; i++) {
-            week.add(InlineKeyboardButton.builder().text(" ").callbackData("ic:noop").build());
-        }
-
-        for (int day = 1; day <= len; day++) {
-            LocalDate date = ym.atDay(day);
-            EnumSet<CalendarRoleType> roles = rolesByDate.getOrDefault(date, EnumSet.noneOf(CalendarRoleType.class));
-
-            String label = buildDayLabelForCalendar(day, roles, filter);
-            week.add(InlineKeyboardButton.builder().text(label).callbackData("ic:day:" + date).build());
-            if (week.size() == 7) {
-                rows.add(new InlineKeyboardRow(week));
-                week = new ArrayList<>();
-            }
-        }
-
-        if (!week.isEmpty()) {
-            while (week.size() < 7) week.add(InlineKeyboardButton.builder().text(" ").callbackData("ic:noop").build());
-            rows.add(new InlineKeyboardRow(week));
-        }
-
-        // Две отдельные кнопки внизу дают календарю больше доступной ширины на узких экранах.
-        rows.add(new InlineKeyboardRow(
-                InlineKeyboardButton.builder().text("← К разделам").callbackData("ic:menu").build()
-        ));
-        rows.add(new InlineKeyboardRow(
-                InlineKeyboardButton.builder().text("Закрыть").callbackData("ic:close").build()
-        ));
-
-        return InlineKeyboardMarkup.builder().keyboard(rows).build();
-    }
-
-    private static String buildDayLabelForCalendar(int day, EnumSet<CalendarRoleType> roles, InterviewCalendarState.ScheduleFilter filter) {
-        if (roles == null || roles.isEmpty()) return paddedCalendarLabel(String.valueOf(day));
-        // Для календаря используем максимально компактные иконки, чтобы не было "..."
-        // на двухзначных датах в узкой 7-колоночной сетке Telegram.
-        if (filter == InterviewCalendarState.ScheduleFilter.PENDING) {
-            if (roles.contains(CalendarRoleType.INTERVIEWER)) return paddedCalendarLabel(day + ROLE_INTERVIEWER_CALENDAR);
-            if (roles.contains(CalendarRoleType.CANDIDATE)) return paddedCalendarLabel(day + ROLE_CANDIDATE_CALENDAR);
-            return paddedCalendarLabel(String.valueOf(day));
-        }
-        if (roles.contains(CalendarRoleType.INTERVIEWER)) return paddedCalendarLabel(day + ROLE_INTERVIEWER_CALENDAR);
-        if (roles.contains(CalendarRoleType.CANDIDATE)) return paddedCalendarLabel(day + ROLE_CANDIDATE_CALENDAR);
-        return paddedCalendarLabel(String.valueOf(day));
-    }
-
-    private static String paddedCalendarLabel(String label) {
-        return CALENDAR_LABEL_PAD + label + CALENDAR_LABEL_PAD;
-    }
-
-    private InlineKeyboardMarkup timePickerKeyboard(LocalDate date, Map<Integer, EnumSet<CalendarRoleType>> hourRoles) {
+    /**
+     * Сетка часов расписания: как при записи на слот — прошедшее время того же дня даёт {@code ic:timepast},
+     * занятые часы с эмодзи статуса, свободные — только HH:mm.
+     */
+    private InlineKeyboardMarkup timePickerKeyboard(
+            LocalDate date,
+            Map<Integer, EnumSet<InterviewRequestStatus>> hourStatuses,
+            LocalDateTime now) {
         List<InlineKeyboardRow> rows = new ArrayList<>();
         List<InlineKeyboardButton> row = new ArrayList<>();
 
         for (int hour = TIME_PICKER_START_HOUR; hour < TIME_PICKER_END_HOUR; hour++) {
-            EnumSet<CalendarRoleType> roles = hourRoles != null
-                    ? hourRoles.getOrDefault(hour, EnumSet.noneOf(CalendarRoleType.class))
-                    : EnumSet.noneOf(CalendarRoleType.class);
-            String label = buildHourLabel(hour, roles);
+            LocalDateTime slotAt = date.atTime(hour, 0);
+            boolean past = slotAt.isBefore(now);
+            EnumSet<InterviewRequestStatus> statuses = hourStatuses != null
+                    ? hourStatuses.getOrDefault(hour, EnumSet.noneOf(InterviewRequestStatus.class))
+                    : EnumSet.noneOf(InterviewRequestStatus.class);
+            String timeStr = LocalTime.of(hour, 0).format(TIME_LABEL);
+            String label;
+            String callback;
+            if (past) {
+                label = timeStr;
+                callback = "ic:timepast";
+            } else if (!statuses.isEmpty()) {
+                StringBuilder lb = new StringBuilder(timeStr);
+                TelegramScheduleUi.appendDominantInterviewStatusIcon(lb, statuses);
+                label = lb.toString();
+                callback = "ic:time:" + date + ":" + hour;
+            } else {
+                label = timeStr;
+                callback = "ic:time:" + date + ":" + hour;
+            }
             row.add(InlineKeyboardButton.builder()
                     .text(label)
-                    .callbackData("ic:time:" + date + ":" + hour)
+                    .callbackData(callback)
                     .build());
             if (row.size() == 4) {
                 rows.add(new InlineKeyboardRow(row));
@@ -1254,22 +1244,11 @@ public class CallbackQueryHandler implements BotCommandHandler {
         if (!row.isEmpty()) rows.add(new InlineKeyboardRow(row));
 
         rows.add(new InlineKeyboardRow(InlineKeyboardButton.builder()
-                .text("⬅️ Другой день")
+                .text("← Другой день")
                 .callbackData("ic:back")
                 .build()));
 
         return InlineKeyboardMarkup.builder().keyboard(rows).build();
-    }
-
-    private static String buildHourLabel(int hour, EnumSet<CalendarRoleType> roles) {
-        String time = LocalTime.of(hour, 0).format(TIME_LABEL);
-        if (roles == null || roles.isEmpty()) {
-            return time;
-        }
-        StringBuilder sb = new StringBuilder(time);
-        if (roles.contains(CalendarRoleType.CANDIDATE)) sb.append(" ").append(ROLE_CANDIDATE);
-        if (roles.contains(CalendarRoleType.INTERVIEWER)) sb.append(" ").append(ROLE_INTERVIEWER);
-        return sb.toString();
     }
 
     private InlineKeyboardMarkup timeBackKeyboard(LocalDate date) {
@@ -1331,8 +1310,8 @@ public class CallbackQueryHandler implements BotCommandHandler {
                         .build());
             }
             case "cmd:schedule" -> {
-                stateService.startInterviewCalendar(chatId, user.getId());
-                showScheduleFilterMenu(chatId, null, telegramClient);
+                var calendarState = stateService.startInterviewCalendar(chatId, user.getId());
+                interviewCalendarPresenter.sendMonthView(chatId, null, calendarState, telegramClient, true);
             }
             case "cmd:help" -> {
                 telegramClient.execute(SendMessage.builder()
@@ -1376,7 +1355,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
             state.language = Language.valueOf(data.substring("as:lang:".length()));
             state.format = InterviewFormat.TECHNICAL;
             state.level = null;
-            state.joinInterviewId = null;
+            state.openSlotRequestId = null;
             state.interviewerUserId = null;
             state.dateTime = null;
             state.durationMinutes = null;
@@ -1443,7 +1422,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
 
             state.dateTime = slot.dateTime();
             state.durationMinutes = 60;
-            state.joinInterviewId = slot.interviewId();
+            state.openSlotRequestId = slot.openSlotRequestId();
             state.interviewerUserId = slot.partnerUserId();
             state.step = CreateInterviewState.Step.CONFIRM;
 
@@ -1479,11 +1458,11 @@ public class CallbackQueryHandler implements BotCommandHandler {
                 return;
             }
 
-            if (!"yes".equals(action) || state.joinInterviewId == null || state.dateTime == null || state.durationMinutes == null) {
+            if (!"yes".equals(action) || state.openSlotRequestId == null || state.dateTime == null || state.durationMinutes == null) {
                 return;
             }
 
-            if (hasScheduledConflictAtSameTime(state.candidateUserId, state.joinInterviewId, state.dateTime, state.durationMinutes)) {
+            if (hasScheduledConflictAtSameTime(state.candidateUserId, state.openSlotRequestId, state.dateTime, state.durationMinutes)) {
                 telegramClient.execute(SendMessage.builder()
                         .chatId(chatId)
                         .text("На этот временной слот у вас уже есть согласованное собеседование. Выберите другое время.")
@@ -1493,33 +1472,17 @@ public class CallbackQueryHandler implements BotCommandHandler {
             }
 
             try {
-                InterviewRequest request = interviewRequestService.createRequest(
+                bookOpenSlotAndNotify(
+                        chatId,
                         state.candidateUserId,
                         state.interviewerUserId,
                         state.language,
                         InterviewFormat.TECHNICAL,
                         state.dateTime,
-                        state.durationMinutes
-                );
-                User candidate = userService.getUserById(state.candidateUserId);
-                User interviewer = userService.getUserById(state.interviewerUserId);
-                String candidateLabel = candidate.getUsername() != null
-                        ? "@" + candidate.getUsername()
-                        : "пользователь #" + candidate.getId();
-                telegramClient.execute(SendMessage.builder()
-                        .chatId(chatId)
-                        .text("Заявка отправлена интервьюеру. Ожидайте ответа.\n"
-                                + "Дата/время: " + DT_FORMAT.format(state.dateTime) + "\n"
-                                + "Язык: " + state.language)
-                        .build());
-                telegramClient.execute(SendMessage.builder()
-                        .chatId(interviewer.getTelegramId())
-                        .text("Новая заявка на собеседование от " + candidateLabel + ":\n"
-                                + "Язык: " + state.language + "\n"
-                                + "Дата/время: " + DT_FORMAT.format(state.dateTime) + "\n"
-                                + "Длительность: " + state.durationMinutes + " мин")
-                        .replyMarkup(requestKeyboard(request.getId()))
-                        .build());
+                        state.durationMinutes,
+                        "",
+                        state.openSlotRequestId,
+                        telegramClient);
                 stateService.clearCreateInterview(chatId);
                 sendMainMenu(chatId, telegramClient);
             } catch (InterviewConflictException e) {
@@ -1532,6 +1495,12 @@ public class CallbackQueryHandler implements BotCommandHandler {
                 telegramClient.execute(SendMessage.builder()
                         .chatId(chatId)
                         .text("Не удалось отправить заявку: конфликт по времени или уже есть такая заявка.")
+                        .replyMarkup(availableSlotsKeyboard(state.availableSlots != null ? state.availableSlots : List.of()))
+                        .build());
+            } catch (UserNotFoundException e) {
+                telegramClient.execute(SendMessage.builder()
+                        .chatId(chatId)
+                        .text("Ошибка: пользователь не найден. Попробуйте выбрать слот заново.")
                         .replyMarkup(availableSlotsKeyboard(state.availableSlots != null ? state.availableSlots : List.of()))
                         .build());
             }
@@ -1603,8 +1572,8 @@ public class CallbackQueryHandler implements BotCommandHandler {
 
     private static InlineKeyboardMarkup createInterviewLanguageKeyboard() {
         var java = InlineKeyboardButton.builder().text("Java").callbackData("ci:lang:JAVA").build();
-        var csharp = InlineKeyboardButton.builder().text("C#").callbackData("ci:lang:CSHARP").build();
         var python = InlineKeyboardButton.builder().text("Python").callbackData("ci:lang:PYTHON").build();
+        var csharp = InlineKeyboardButton.builder().text("C#").callbackData("ci:lang:CSHARP").build();
         var algorithms = InlineKeyboardButton.builder().text("Algorithms").callbackData("ci:lang:ALGORITHMS").build();
         var productManager = InlineKeyboardButton.builder().text("Product Manager").callbackData("ci:lang:PRODUCT_MANAGER").build();
         var js = InlineKeyboardButton.builder().text("JavaScript").callbackData("ci:lang:JAVASCRIPT").build();
@@ -1617,8 +1586,8 @@ public class CallbackQueryHandler implements BotCommandHandler {
         var sa = InlineKeyboardButton.builder().text("System Analysis").callbackData("ci:lang:SYSTEM_ANALYSIS").build();
         var cancel = InlineKeyboardButton.builder().text("Отмена").callbackData("ci:cancel").build();
         return InlineKeyboardMarkup.builder().keyboard(List.of(
-                new InlineKeyboardRow(java, csharp),
-                new InlineKeyboardRow(python, algorithms, productManager, js),
+                new InlineKeyboardRow(java, python ),
+                new InlineKeyboardRow(csharp, algorithms, productManager, js),
                 new InlineKeyboardRow(kotlin, swift),
                 new InlineKeyboardRow(go, qa),
                 new InlineKeyboardRow(data, ba),
@@ -1716,18 +1685,29 @@ public class CallbackQueryHandler implements BotCommandHandler {
         sb.append("\n");
     }
 
-    private boolean hasScheduledConflictAtSameTime(Long userId, Long excludeInterviewId, LocalDateTime start, int durationMinutes) {
+    private boolean hasScheduledConflictAtSameTime(Long userId, Long excludeRequestId, LocalDateTime start, int durationMinutes) {
         if (userId == null || start == null) return false;
         LocalDateTime end = start.plusMinutes(durationMinutes);
-        return interviewRequestService.getUserRequests(userId, null).stream()
-                .filter(r -> r.getStatus() != InterviewRequestStatus.DECLINED)
-                .filter(r -> r.getStatus() != InterviewRequestStatus.CANCELLED)
-                .filter(r -> excludeInterviewId == null || !excludeInterviewId.equals(r.getId()))
-                .anyMatch(r -> {
-                    LocalDateTime iStart = r.getDateTime();
-                    LocalDateTime iEnd = iStart.plusMinutes(r.getDurationMinutes());
-                    return iStart.isBefore(end) && start.isBefore(iEnd);
-                });
+        List<InterviewRequest> requests = interviewRequestService.getUserRequests(userId, null);
+        if (requests != null) {
+            boolean requestOverlap = requests.stream()
+                    .filter(r -> r.getStatus() != InterviewRequestStatus.DECLINED)
+                    .filter(r -> r.getStatus() != InterviewRequestStatus.CANCELLED)
+                    .filter(r -> excludeRequestId == null || !excludeRequestId.equals(r.getId()))
+                    .anyMatch(r -> {
+                        LocalDateTime iStart = r.getDateTime();
+                        LocalDateTime iEnd = iStart.plusMinutes(r.getDurationMinutes());
+                        return iStart.isBefore(end) && start.isBefore(iEnd);
+                    });
+            if (requestOverlap) return true;
+        }
+        List<Interview> scheduled = interviewService.getUserInterviews(userId, InterviewStatus.SCHEDULED);
+        if (scheduled == null) return false;
+        return scheduled.stream().anyMatch(i -> {
+            LocalDateTime iStart = i.getDateTime();
+            LocalDateTime iEnd = iStart.plusMinutes(i.getDuration());
+            return iStart.isBefore(end) && start.isBefore(iEnd);
+        });
     }
 
     private static InlineKeyboardMarkup requestKeyboard(Long requestId) {
@@ -1745,78 +1725,44 @@ public class CallbackQueryHandler implements BotCommandHandler {
     }
 
 
-    /** Проверяет, соответствует ли интервью выбранному фильтру расписания. */
-    private static boolean scheduleFilterMatches(InterviewRequest i, InterviewCalendarState.ScheduleFilter filter) {
-        if (filter == null) return true;
-        return switch (filter) {
-            case PENDING -> i.getStatus() == InterviewRequestStatus.PENDING;
-            case CONFIRMED -> i.getStatus() == InterviewRequestStatus.ACCEPTED;
-        };
-    }
-
-    private static CalendarRoleType resolveUserRole(InterviewRequest request, Long userId) {
-        boolean isInterviewer = request.getInterviewer() != null
-                && request.getInterviewer().getId() != null
-                && request.getInterviewer().getId().equals(userId);
-        return isInterviewer ? CalendarRoleType.INTERVIEWER : CalendarRoleType.CANDIDATE;
+    /**
+     * Второй участник заявки для экрана расписания: не совпадает с просматривающим.
+     * Для открытого solo-слота ({@code partner == null}) второго участника нет.
+     */
+    private static User schedulePartnerForViewer(InterviewRequest request, Long viewerUserId) {
+        if (request.getPartner() == null || request.getSlotOwner() == null) {
+            return null;
+        }
+        Long ownerId = request.getSlotOwner().getId();
+        Long partnerId = request.getPartner().getId();
+        if (ownerId == null || partnerId == null || viewerUserId == null) {
+            return null;
+        }
+        if (viewerUserId.equals(ownerId)) {
+            return request.getPartner();
+        }
+        if (viewerUserId.equals(partnerId)) {
+            return request.getSlotOwner();
+        }
+        return null;
     }
 
     private java.util.Optional<Interview> findScheduledInterviewByRequest(InterviewRequest request) {
-        if (request == null || request.getCandidate() == null || request.getCandidate().getId() == null) {
+        if (request == null || request.getPartner() == null || request.getPartner().getId() == null
+                || request.getSlotOwner() == null || request.getSlotOwner().getId() == null) {
             return java.util.Optional.empty();
         }
-        return interviewService.getUserInterviews(request.getCandidate().getId(), InterviewStatus.SCHEDULED).stream()
+        Long partnerId = request.getPartner().getId();
+        return interviewService.getUserInterviews(partnerId, InterviewStatus.SCHEDULED).stream()
                 .filter(i -> i.getCandidate() != null && i.getInterviewer() != null)
                 .filter(i -> i.getCandidate().getId() != null && i.getInterviewer().getId() != null)
-                .filter(i -> i.getCandidate().getId().equals(request.getCandidate().getId()))
-                .filter(i -> i.getInterviewer().getId().equals(request.getInterviewer().getId()))
+                .filter(i -> i.getCandidate().getId().equals(partnerId))
+                .filter(i -> i.getInterviewer().getId().equals(request.getSlotOwner().getId()))
                 .filter(i -> i.getDateTime().equals(request.getDateTime()))
                 .filter(i -> i.getDuration().equals(request.getDurationMinutes()))
                 .filter(i -> i.getLanguage() == request.getLanguage())
                 .filter(i -> i.getFormat() == request.getFormat())
                 .findFirst();
-    }
-
-    /** Название раздела расписания для отображения пользователю. */
-    private static String scheduleFilterSectionName(InterviewCalendarState.ScheduleFilter filter) {
-        if (filter == null) return "Расписание";
-        return switch (filter) {
-            case PENDING -> "Заявки на собеседования";
-            case CONFIRMED -> "Согласованные собеседования";
-        };
-    }
-
-    /** Показывает меню выбора раздела расписания. */
-    private void showScheduleFilterMenu(Long chatId, Integer messageId, TelegramClient telegramClient) throws TelegramApiException {
-        String text = "Расписание — выберите раздел:";
-        InlineKeyboardMarkup keyboard = InlineKeyboardMarkup.builder().keyboard(List.of(
-                new InlineKeyboardRow(
-                        InlineKeyboardButton.builder().text("Заявки на собеседования").callbackData("ic:filter:PENDING").build()
-                ),
-                new InlineKeyboardRow(
-                        InlineKeyboardButton.builder().text("Согласованные собеседования").callbackData("ic:filter:CONFIRMED").build()
-                ),
-                new InlineKeyboardRow(
-                        InlineKeyboardButton.builder().text("Закрыть").callbackData("ic:close").build()
-                )
-        )).build();
-        if (messageId != null) {
-            try {
-                telegramClient.execute(EditMessageText.builder()
-                        .chatId(chatId)
-                        .messageId(messageId)
-                        .text(text)
-                        .replyMarkup(keyboard)
-                        .build());
-                return;
-            } catch (TelegramApiException ignored) {
-            }
-        }
-        telegramClient.execute(SendMessage.builder()
-                .chatId(chatId)
-                .text(text)
-                .replyMarkup(keyboard)
-                .build());
     }
 
     /** Callback до выбора языка/формата (или отмена). */

@@ -6,6 +6,7 @@ import com.interviewpartner.bot.model.InterviewFormat;
 import com.interviewpartner.bot.model.InterviewRequest;
 import com.interviewpartner.bot.model.InterviewRequestStatus;
 import com.interviewpartner.bot.model.Language;
+import com.interviewpartner.bot.model.User;
 import com.interviewpartner.bot.repository.InterviewRepository;
 import com.interviewpartner.bot.repository.InterviewRequestRepository;
 import com.interviewpartner.bot.repository.UserRepository;
@@ -46,29 +47,48 @@ public class InterviewRequestServiceImpl implements InterviewRequestService {
         if (dateTime.isBefore(now)) {
             throw new IllegalArgumentException("Interview request time must not be in the past");
         }
-        if (!interviewRepository.findConflictingInterviews(candidateUserId, dateTime, durationMinutes).isEmpty()) {
-            throw new IllegalArgumentException("Candidate has conflicting interview");
-        }
-        if (!interviewRepository.findConflictingInterviews(interviewerUserId, dateTime, durationMinutes).isEmpty()) {
-            throw new IllegalArgumentException("Interviewer has conflicting interview");
-        }
-        boolean duplicatePendingExists = interviewRequestRepository
-                .existsByCandidateIdAndInterviewerIdAndLanguageAndFormatAndDateTimeAndDurationMinutesAndStatus(
-                        candidateUserId,
-                        interviewerUserId,
-                        language,
-                        format,
-                        dateTime,
-                        durationMinutes,
-                        InterviewRequestStatus.PENDING
-                );
-        if (duplicatePendingExists) {
-            throw new IllegalArgumentException("Duplicate pending interview request");
+
+        boolean soloOpen = candidateUserId.equals(interviewerUserId);
+        User slotOwner;
+        User partner;
+        if (soloOpen) {
+            slotOwner = candidate;
+            partner = null;
+            if (!interviewRepository.findConflictingInterviews(candidateUserId, dateTime, durationMinutes).isEmpty()) {
+                throw new IllegalArgumentException("Candidate has conflicting interview");
+            }
+            boolean dup = interviewRequestRepository
+                    .existsBySlotOwnerIdAndPartnerIsNullAndLanguageAndFormatAndDateTimeAndDurationMinutesAndStatus(
+                            candidateUserId, language, format, dateTime, durationMinutes, InterviewRequestStatus.PENDING);
+            if (dup) {
+                throw new IllegalArgumentException("Duplicate pending interview request");
+            }
+        } else {
+            slotOwner = interviewer;
+            partner = candidate;
+            if (!interviewRepository.findConflictingInterviews(candidateUserId, dateTime, durationMinutes).isEmpty()) {
+                throw new IllegalArgumentException("Candidate has conflicting interview");
+            }
+            if (!interviewRepository.findConflictingInterviews(interviewerUserId, dateTime, durationMinutes).isEmpty()) {
+                throw new IllegalArgumentException("Interviewer has conflicting interview");
+            }
+            boolean dup = interviewRequestRepository
+                    .existsBySlotOwnerIdAndPartnerIdAndLanguageAndFormatAndDateTimeAndDurationMinutesAndStatus(
+                            interviewerUserId,
+                            candidateUserId,
+                            language,
+                            format,
+                            dateTime,
+                            durationMinutes,
+                            InterviewRequestStatus.PENDING);
+            if (dup) {
+                throw new IllegalArgumentException("Duplicate pending interview request");
+            }
         }
 
         InterviewRequest saved = interviewRequestRepository.save(InterviewRequest.builder()
-                .candidate(candidate)
-                .interviewer(interviewer)
+                .slotOwner(slotOwner)
+                .partner(partner)
                 .language(language)
                 .format(format)
                 .dateTime(dateTime)
@@ -77,14 +97,62 @@ public class InterviewRequestServiceImpl implements InterviewRequestService {
                 .createdAt(LocalDateTime.now(clock))
                 .respondedAt(null)
                 .build());
-        log.info("Создан запрос на собеседование: requestId={}, candidateId={}, interviewerId={}, time={}",
-                saved.getId(), candidateUserId, interviewerUserId, dateTime);
+        log.info("Создан запрос на собеседование: requestId={}, slotOwnerId={}, partnerId={}, time={}",
+                saved.getId(),
+                slotOwner.getId(),
+                partner != null ? partner.getId() : null,
+                dateTime);
+        return saved;
+    }
+
+    @Override
+    public InterviewRequest completeOpenSlotWithJoiner(Long openSlotRequestId,
+                                                       Long joinerUserId,
+                                                       Language language,
+                                                       InterviewFormat format,
+                                                       LocalDateTime dateTime,
+                                                       int durationMinutes,
+                                                       LocalDateTime now) {
+        InterviewRequest req = interviewRequestRepository.findById(openSlotRequestId)
+                .orElseThrow(() -> new IllegalArgumentException("Request not found: id=" + openSlotRequestId));
+        if (req.getStatus() != InterviewRequestStatus.PENDING) {
+            throw new IllegalArgumentException("Request not found or not pending: id=" + openSlotRequestId);
+        }
+        if (req.getPartner() != null) {
+            throw new IllegalArgumentException("Request is not an open solo slot");
+        }
+        if (req.getSlotOwner().getId().equals(joinerUserId)) {
+            throw new IllegalArgumentException("Cannot book own open slot");
+        }
+        if (req.getLanguage() != language || req.getFormat() != format
+                || !req.getDateTime().equals(dateTime)
+                || !req.getDurationMinutes().equals(durationMinutes)) {
+            throw new IllegalArgumentException("Open slot parameters mismatch");
+        }
+        if (dateTime.isBefore(now)) {
+            throw new IllegalArgumentException("Interview request time must not be in the past");
+        }
+        User joiner = userRepository.findById(joinerUserId)
+                .orElseThrow(() -> new UserNotFoundException("User with id=" + joinerUserId + " not found"));
+        Long ownerId = req.getSlotOwner().getId();
+        if (!interviewRepository.findConflictingInterviews(joinerUserId, dateTime, durationMinutes).isEmpty()) {
+            throw new IllegalArgumentException("Candidate has conflicting interview");
+        }
+        if (!interviewRepository.findConflictingInterviews(ownerId, dateTime, durationMinutes).isEmpty()) {
+            throw new IllegalArgumentException("Interviewer has conflicting interview");
+        }
+        req.setPartner(joiner);
+        req.setStatus(InterviewRequestStatus.ACCEPTED);
+        req.setRespondedAt(now);
+        InterviewRequest saved = interviewRequestRepository.save(req);
+        log.info("Открытый слот закрыт записью партнёра: requestId={}, joinerId={}, ownerId={}",
+                saved.getId(), joinerUserId, ownerId);
         return saved;
     }
 
     @Override
     public InterviewRequest accept(Long requestId, long interviewerTelegramId, LocalDateTime now) {
-        var req = getPendingForInterviewer(requestId, interviewerTelegramId);
+        var req = getPendingForSlotOwner(requestId, interviewerTelegramId);
         req.setStatus(InterviewRequestStatus.ACCEPTED);
         req.setRespondedAt(now);
         InterviewRequest saved = interviewRequestRepository.save(req);
@@ -94,7 +162,7 @@ public class InterviewRequestServiceImpl implements InterviewRequestService {
 
     @Override
     public InterviewRequest decline(Long requestId, long interviewerTelegramId, LocalDateTime now) {
-        var req = getPendingForInterviewer(requestId, interviewerTelegramId);
+        var req = getPendingForSlotOwner(requestId, interviewerTelegramId);
         req.setStatus(InterviewRequestStatus.DECLINED);
         req.setRespondedAt(now);
         InterviewRequest saved = interviewRequestRepository.save(req);
@@ -125,9 +193,9 @@ public class InterviewRequestServiceImpl implements InterviewRequestService {
     public InterviewRequest cancel(Long requestId, long actorTelegramId, LocalDateTime now) {
         var req = interviewRequestRepository.findById(requestId)
                 .orElseThrow(() -> new IllegalArgumentException("Request not found: id=" + requestId));
-        Long candidateTg = req.getCandidate() != null ? req.getCandidate().getTelegramId() : null;
-        Long interviewerTg = req.getInterviewer() != null ? req.getInterviewer().getTelegramId() : null;
-        boolean allowed = Objects.equals(candidateTg, actorTelegramId) || Objects.equals(interviewerTg, actorTelegramId);
+        Long ownerTg = req.getSlotOwner() != null ? req.getSlotOwner().getTelegramId() : null;
+        Long partnerTg = req.getPartner() != null ? req.getPartner().getTelegramId() : null;
+        boolean allowed = Objects.equals(ownerTg, actorTelegramId) || Objects.equals(partnerTg, actorTelegramId);
         if (!allowed) {
             throw new InterviewRequestForbiddenException();
         }
@@ -141,14 +209,13 @@ public class InterviewRequestServiceImpl implements InterviewRequestService {
         return saved;
     }
 
-    private InterviewRequest getPendingForInterviewer(Long requestId, long interviewerTelegramId) {
+    private InterviewRequest getPendingForSlotOwner(Long requestId, long slotOwnerTelegramId) {
         var req = interviewRequestRepository.findByIdAndStatus(requestId, InterviewRequestStatus.PENDING)
                 .orElseThrow(() -> new IllegalArgumentException("Request not found or not pending: id=" + requestId));
-        Long expectedTg = req.getInterviewer() != null ? req.getInterviewer().getTelegramId() : null;
-        if (!Objects.equals(expectedTg, interviewerTelegramId)) {
+        Long expectedTg = req.getSlotOwner() != null ? req.getSlotOwner().getTelegramId() : null;
+        if (!Objects.equals(expectedTg, slotOwnerTelegramId)) {
             throw new InterviewRequestForbiddenException();
         }
         return req;
     }
 }
-

@@ -77,4 +77,12 @@
                 stripComments="true"/>
     </changeSet>
 
+    <changeSet id="010-interview-requests-owner-partner" author="interviewpartner">
+        <sqlFile
+                path="sql/010_interview_requests_owner_partner.sql"
+                relativeToChangelogFile="true"
+                splitStatements="true"
+                stripComments="true"/>
+    </changeSet>
+
 </databaseChangeLog>

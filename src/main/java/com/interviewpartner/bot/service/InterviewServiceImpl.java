@@ -113,14 +113,14 @@ public class InterviewServiceImpl implements InterviewService {
 
         List<AvailableSlotDto> out = new ArrayList<>();
         for (var request : soloRequests) {
-            Long interviewerId = request.getInterviewer().getId();
-            if (interviewerId.equals(candidateUserId)) continue;
-            Level partnerLevel = request.getInterviewer() != null ? request.getInterviewer().getLevel() : null;
+            Long ownerId = request.getSlotOwner().getId();
+            if (ownerId.equals(candidateUserId)) continue;
+            Level partnerLevel = request.getSlotOwner().getLevel();
             if (level != null && !level.equals(partnerLevel)) continue;
             if (interviewRepository.findConflictingPairedInterviews(candidateUserId, request.getDateTime(), SLOT_DURATION).isEmpty()) {
-                User interviewer = request.getInterviewer();
-                String baseLabel = interviewer.getUsername() != null ? "@" + interviewer.getUsername() : "User " + interviewerId;
-                out.add(new AvailableSlotDto(request.getDateTime(), interviewerId, baseLabel, request.getId(), partnerLevel));
+                User owner = request.getSlotOwner();
+                String baseLabel = owner.getUsername() != null ? "@" + owner.getUsername() : "User " + ownerId;
+                out.add(new AvailableSlotDto(request.getDateTime(), ownerId, baseLabel, request.getId(), partnerLevel));
             }
         }
 
