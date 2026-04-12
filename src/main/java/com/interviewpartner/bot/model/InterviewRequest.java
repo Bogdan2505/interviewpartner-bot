@@ -20,10 +20,8 @@ import lombok.Setter;
 import java.time.LocalDateTime;
 
 /**
- * Заявка на собеседование.
- * Владелец слота ({@link #slotOwner}): для открытого окна — создатель; для входящей заявки — интервьюер, который принимает решение.
- * {@link #candidate}: null — открытый solo-слот (в заявке только {@link #slotOwner}).
- * Для прямой заявки к интервьюеру — кандидат (инициатор); после записи на открытый слот второй участник хранится только в {@link Interview}.
+ * Заявка на открытый слот: только владелец ({@link #slotOwner}) и параметры слота.
+ * После записи партнёра второй участник хранится в {@link Interview}.
  */
 @Getter
 @Setter
@@ -41,10 +39,6 @@ public class InterviewRequest {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "owner_user_id", nullable = false)
     private User slotOwner;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "candidate_id", nullable = true)
-    private User candidate;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "language", nullable = false)

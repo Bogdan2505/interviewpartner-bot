@@ -72,6 +72,9 @@ public class CallbackQueryHandler implements BotCommandHandler {
         if (m.contains("conflicting interview")) {
             return "В это время у вас или партнёра уже есть собеседование. Выберите другое время.";
         }
+        if (m.contains("solo slots") || m.contains("owner ids must match")) {
+            return "Прямая заявка к другому пользователю недоступна. Запишитесь через «Доступные слоты» или создайте открытый слот только на себя.";
+        }
         return "Не удалось создать заявку. Выберите другое время или начните заново: /create_interview";
     }
 
@@ -157,7 +160,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
                 return;
             }
             if (safeData.startsWith("ir:")) {
-                handleInterviewRequestCallback(chatId, safeData, callback.getFrom(), telegramClient);
+                handleInterviewRequestCallback(chatId, telegramClient);
                 return;
             }
             if (safeData.startsWith("cmd:")) {
@@ -476,29 +479,8 @@ public class CallbackQueryHandler implements BotCommandHandler {
                                     .text("Открытая заявка создана. Когда кто-то запишется на слот, вы получите уведомление, собеседование создастся автоматически.")
                                     .build());
                         } else {
-                            InterviewRequest request = interviewRequestService.createRequest(
-                                    state.candidateUserId,
-                                    state.interviewerUserId,
-                                    state.language,
-                                    state.format,
-                                    state.dateTime,
-                                    state.durationMinutes,
-                                    null);
-                            User candidate = userService.getUserById(state.candidateUserId);
-                            User interviewer = userService.getUserById(state.interviewerUserId);
-                            String candidateLabel = candidate.getUsername() != null
-                                    ? "@" + candidate.getUsername()
-                                    : "пользователь #" + candidate.getId();
                             telegramClient.execute(SendMessage.builder().chatId(chatId)
-                                    .text("Заявка отправлена интервьюеру. Ожидайте ответа.")
-                                    .build());
-                            telegramClient.execute(SendMessage.builder()
-                                    .chatId(interviewer.getTelegramId())
-                                    .text("Новая заявка на собеседование от " + candidateLabel + ":\n"
-                                            + "Язык: " + state.language + "\n"
-                                            + "Дата/время: " + DT_FORMAT.format(state.dateTime) + "\n"
-                                            + "Длительность: " + state.durationMinutes + " мин")
-                                    .replyMarkup(requestKeyboard(request.getId()))
+                                    .text("Прямая заявка к выбранному партнёру недоступна. Запишитесь через «Доступные слоты» в меню или создайте открытый слот на себя.")
                                     .build());
                         }
                     }
@@ -752,21 +734,17 @@ public class CallbackQueryHandler implements BotCommandHandler {
         if (creatorTg == null) {
             throw new IllegalArgumentException("Interview slot owner has no telegram id");
         }
-        InterviewRequest accepted;
-        if (openSlotRequestId != null) {
-            accepted = interviewRequestService.completeOpenSlotWithJoiner(
-                    openSlotRequestId,
-                    candidateUserId,
-                    language,
-                    format,
-                    dateTime,
-                    durationMinutes,
-                    LocalDateTime.now(clock));
-        } else {
-            InterviewRequest request = interviewRequestService.createRequest(
-                    candidateUserId, interviewerUserId, language, format, dateTime, durationMinutes, null);
-            accepted = interviewRequestService.accept(request.getId(), creatorTg, LocalDateTime.now(clock));
+        if (openSlotRequestId == null) {
+            throw new IllegalArgumentException("Open slot request id required for booking");
         }
+        InterviewRequest accepted = interviewRequestService.completeOpenSlotWithJoiner(
+                openSlotRequestId,
+                candidateUserId,
+                language,
+                format,
+                dateTime,
+                durationMinutes,
+                LocalDateTime.now(clock));
 
         Interview created = interviewService.createInterview(
                 candidateUserId,
@@ -806,107 +784,14 @@ public class CallbackQueryHandler implements BotCommandHandler {
                 .build());
     }
 
-    private void handleInterviewRequestCallback(
-            Long chatId,
-            String data,
-            org.telegram.telegrambots.meta.api.objects.User fromUser,
-            TelegramClient telegramClient) throws TelegramApiException {
-        // ir:accept:<id> / ir:decline:<id>
-        if (fromUser == null) {
-            telegramClient.execute(SendMessage.builder().chatId(chatId).text("Не удалось определить пользователя.").build());
-            return;
-        }
-        long actorTelegramId = fromUser.getId();
-        String[] parts = data.split(":", 3);
-        if (parts.length != 3) {
-            telegramClient.execute(SendMessage.builder().chatId(chatId).text("Некорректная заявка.").build());
-            return;
-        }
-        String action = parts[1];
-        Long requestId;
-        try {
-            requestId = Long.parseLong(parts[2]);
-        } catch (NumberFormatException e) {
-            telegramClient.execute(SendMessage.builder().chatId(chatId).text("Некорректная заявка.").build());
-            return;
-        }
-
-        if (action.equals("decline")) {
-            try {
-                var req = interviewRequestService.decline(requestId, actorTelegramId, LocalDateTime.now(clock));
-                telegramClient.execute(SendMessage.builder().chatId(chatId).text("Ок, отклонил.").build());
-                sendMainMenu(chatId, telegramClient);
-                if (req.getCandidate() != null) {
-                    User applicant = userService.getUserById(req.getCandidate().getId());
-                    if (applicant.getTelegramId() != null) {
-                        telegramClient.execute(SendMessage.builder()
-                                .chatId(applicant.getTelegramId())
-                                .text("Партнёр отклонил запрос на собеседование.")
-                                .replyMarkup(ChatMenuKeyboardBuilder.buildPersistentKeyboard())
-                                .build());
-                    }
-                }
-            } catch (InterviewRequestForbiddenException e) {
-                telegramClient.execute(SendMessage.builder().chatId(chatId)
-                        .text("Отклонить заявку может только приглашённый интервьюер.")
-                        .replyMarkup(ChatMenuKeyboardBuilder.buildPersistentKeyboard())
-                        .build());
-            } catch (IllegalArgumentException e) {
-                telegramClient.execute(SendMessage.builder().chatId(chatId)
-                        .text("Заявка не найдена или уже обработана.")
-                        .replyMarkup(ChatMenuKeyboardBuilder.buildPersistentKeyboard())
-                        .build());
-            }
-            return;
-        }
-        if (action.equals("accept")) {
-            InterviewRequest req;
-            try {
-                req = interviewRequestService.accept(requestId, actorTelegramId, LocalDateTime.now(clock));
-            } catch (InterviewRequestForbiddenException e) {
-                telegramClient.execute(SendMessage.builder().chatId(chatId)
-                        .text("Принять заявку может только приглашённый интервьюер.")
-                        .replyMarkup(ChatMenuKeyboardBuilder.buildPersistentKeyboard())
-                        .build());
-                return;
-            } catch (IllegalArgumentException e) {
-                telegramClient.execute(SendMessage.builder().chatId(chatId)
-                        .text("Заявка не найдена или уже обработана.")
-                        .replyMarkup(ChatMenuKeyboardBuilder.buildPersistentKeyboard())
-                        .build());
-                return;
-            }
-            try {
-                Interview created = interviewService.createInterview(
-                        req.getCandidate().getId(),
-                        req.getSlotOwner().getId(),
-                        req.getLanguage(),
-                        req.getLevel(),
-                        req.getFormat(),
-                        req.getDateTime(),
-                        req.getDurationMinutes(),
-                        true
-                );
-                Interview forVideo = interviewService.getInterviewWithParticipants(created.getId());
-                String meetingLinkBlock = videoMeetingBlock(forVideo);
-                telegramClient.execute(SendMessage.builder().chatId(chatId).text("Принято. Собеседование создано." + meetingLinkBlock).build());
-                sendMainMenu(chatId, telegramClient);
-                User applicant = userService.getUserById(req.getCandidate().getId());
-                telegramClient.execute(SendMessage.builder()
-                        .chatId(applicant.getTelegramId())
-                        .text("Партнёр принял запрос. Собеседование создано на " + DT_FORMAT.format(req.getDateTime()) + "." + meetingLinkBlock)
-                        .replyMarkup(ChatMenuKeyboardBuilder.buildPersistentKeyboard())
-                        .build());
-            } catch (InterviewConflictException e) {
-                telegramClient.execute(SendMessage.builder().chatId(chatId).text("Не могу принять: конфликт по времени.").build());
-                sendMainMenu(chatId, telegramClient);
-            } catch (IllegalArgumentException e) {
-                telegramClient.execute(SendMessage.builder().chatId(chatId)
-                        .text("Нельзя создать собеседование: указанное время уже в прошлом.")
-                        .build());
-                sendMainMenu(chatId, telegramClient);
-            }
-        }
+    private void handleInterviewRequestCallback(Long chatId, TelegramClient telegramClient) throws TelegramApiException {
+        // Старые кнопки ir:accept / ir:decline после удаления второго участника из заявок.
+        telegramClient.execute(SendMessage.builder()
+                .chatId(chatId)
+                .text("Это действие устарело. Запись на слот — через «Доступные слоты»; открытый слот — только на себя в «Создать собеседование».")
+                .replyMarkup(ChatMenuKeyboardBuilder.buildPersistentKeyboard())
+                .build());
+        sendMainMenu(chatId, telegramClient);
     }
 
     /**
@@ -1032,17 +917,22 @@ public class CallbackQueryHandler implements BotCommandHandler {
                     telegramClient.execute(SendMessage.builder().chatId(chatId).text("Пользователь не найден.").build());
                     return;
                 }
+                java.util.Optional<Interview> linkedInterview = before.getStatus() == InterviewRequestStatus.ACCEPTED
+                        ? findScheduledInterviewByRequest(before)
+                        : java.util.Optional.empty();
                 InterviewRequest cancelled = interviewRequestService.cancel(requestId, fromUser.getId(), LocalDateTime.now(clock));
                 boolean wasAccepted = before.getStatus() == InterviewRequestStatus.ACCEPTED;
                 if (wasAccepted) {
-                    findScheduledInterviewByRequest(cancelled)
-                            .ifPresent(i -> interviewService.cancelInterview(i.getId()));
+                    linkedInterview.ifPresent(i -> interviewService.cancelInterview(i.getId()));
                 }
-                User notifyUser;
-                if (java.util.Objects.equals(before.getSlotOwner().getId(), actor.getId())) {
-                    notifyUser = before.getCandidate();
-                } else {
-                    notifyUser = before.getSlotOwner();
+                User notifyUser = null;
+                if (linkedInterview.isPresent()) {
+                    Interview iv = linkedInterview.get();
+                    if (java.util.Objects.equals(before.getSlotOwner().getId(), actor.getId())) {
+                        notifyUser = iv.getCandidate();
+                    } else {
+                        notifyUser = before.getSlotOwner();
+                    }
                 }
                 if (notifyUser != null && notifyUser.getTelegramId() != null) {
                     String title = wasAccepted
@@ -1184,7 +1074,6 @@ public class CallbackQueryHandler implements BotCommandHandler {
             bookedList = compactHourDetailsHidePendingWhenAccepted(bookedList);
             bookedList = bookedList.stream()
                     .filter(r -> !(r.getStatus() == InterviewRequestStatus.ACCEPTED
-                            && r.getCandidate() == null
                             && findScheduledInterviewByRequest(r).isPresent()))
                     .toList();
             final List<InterviewRequest> bookedListFinal = bookedList;
@@ -1800,13 +1689,6 @@ public class CallbackQueryHandler implements BotCommandHandler {
         });
     }
 
-    private static InlineKeyboardMarkup requestKeyboard(Long requestId) {
-        var accept = InlineKeyboardButton.builder().text("Принять").callbackData("ir:accept:" + requestId).build();
-        var decline = InlineKeyboardButton.builder().text("Отклонить").callbackData("ir:decline:" + requestId).build();
-        List<InlineKeyboardRow> rows = List.of(new InlineKeyboardRow(accept, decline));
-        return InlineKeyboardMarkup.builder().keyboard(rows).build();
-    }
-
     private static final String[] DAY_NAMES_RU = new String[]{"Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"};
     private static final String[] MONTH_NAMES_RU = new String[]{"Янв", "Фев", "Мар", "Апр", "Май", "Июн", "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек"};
 
@@ -1819,7 +1701,6 @@ public class CallbackQueryHandler implements BotCommandHandler {
         Long ownerUserId = interview.getInterviewer().getId();
         interviewRequestService.getUserRequests(ownerUserId, null).stream()
                 .filter(r -> r.getStatus() == InterviewRequestStatus.ACCEPTED)
-                .filter(r -> r.getCandidate() == null)
                 .filter(r -> r.getDateTime().equals(interview.getDateTime()))
                 .filter(r -> Objects.equals(r.getDurationMinutes(), interview.getDuration()))
                 .findFirst()
@@ -1834,33 +1715,18 @@ public class CallbackQueryHandler implements BotCommandHandler {
         if (request.getSlotOwner() == null || viewerUserId == null) {
             return null;
         }
-        if (request.getCandidate() != null) {
-            Long ownerId = request.getSlotOwner().getId();
-            Long candId = request.getCandidate().getId();
-            if (ownerId == null || candId == null) {
-                return null;
-            }
-            if (viewerUserId.equals(ownerId)) {
-                return request.getCandidate();
-            }
-            if (viewerUserId.equals(candId)) {
-                return request.getSlotOwner();
-            }
-            return null;
-        }
-        Optional<Interview> inv = findScheduledInterviewByRequest(request);
-        if (inv.isEmpty()) {
-            return null;
-        }
-        Interview i = inv.get();
-        Long ownerId = request.getSlotOwner().getId();
-        if (viewerUserId.equals(ownerId)) {
-            return i.getCandidate();
-        }
-        if (i.getCandidate() != null && viewerUserId.equals(i.getCandidate().getId())) {
-            return i.getInterviewer();
-        }
-        return null;
+        return findScheduledInterviewByRequest(request)
+                .map(i -> {
+                    Long ownerId = request.getSlotOwner().getId();
+                    if (viewerUserId.equals(ownerId)) {
+                        return i.getCandidate();
+                    }
+                    if (i.getCandidate() != null && viewerUserId.equals(i.getCandidate().getId())) {
+                        return i.getInterviewer();
+                    }
+                    return null;
+                })
+                .orElse(null);
     }
 
     private Optional<Interview> findScheduledInterviewByRequest(InterviewRequest request) {
@@ -1868,18 +1734,6 @@ public class CallbackQueryHandler implements BotCommandHandler {
             return Optional.empty();
         }
         Long ownerId = request.getSlotOwner().getId();
-        if (request.getCandidate() != null && request.getCandidate().getId() != null) {
-            Long candId = request.getCandidate().getId();
-            return interviewService.getUserInterviews(candId, InterviewStatus.SCHEDULED).stream()
-                    .filter(i -> i.getCandidate() != null && i.getInterviewer() != null)
-                    .filter(i -> candId.equals(i.getCandidate().getId()))
-                    .filter(i -> ownerId.equals(i.getInterviewer().getId()))
-                    .filter(i -> i.getDateTime().equals(request.getDateTime()))
-                    .filter(i -> i.getDuration().equals(request.getDurationMinutes()))
-                    .filter(i -> i.getLanguage() == request.getLanguage())
-                    .filter(i -> i.getFormat() == request.getFormat())
-                    .findFirst();
-        }
         return interviewService.getUserInterviews(ownerId, InterviewStatus.SCHEDULED).stream()
                 .filter(i -> i.getCandidate() != null && i.getInterviewer() != null)
                 .filter(i -> ownerId.equals(i.getInterviewer().getId()))

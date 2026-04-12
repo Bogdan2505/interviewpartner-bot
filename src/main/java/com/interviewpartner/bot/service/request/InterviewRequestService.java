@@ -10,6 +10,9 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 public interface InterviewRequestService {
+    /**
+     * Создаёт заявку на открытый solo-слот: {@code candidateUserId} и {@code interviewerUserId} должны совпадать (владелец слота).
+     */
     InterviewRequest createRequest(Long candidateUserId,
                                    Long interviewerUserId,
                                    Language language,
@@ -18,12 +21,6 @@ public interface InterviewRequestService {
                                    int durationMinutes,
                                    Level level);
 
-    InterviewRequest accept(Long requestId, long interviewerTelegramId, LocalDateTime now);
-
-    InterviewRequest decline(Long requestId, long interviewerTelegramId, LocalDateTime now);
-
-    InterviewRequest getPending(Long requestId);
-
     List<InterviewRequest> getUserRequests(Long userId, InterviewRequestStatus status);
 
     List<InterviewRequest> getOpenSoloRequests(Language language, Long excludeUserId, LocalDateTime now);
@@ -31,7 +28,7 @@ public interface InterviewRequestService {
     InterviewRequest cancel(Long requestId, long actorTelegramId, LocalDateTime now);
 
     /**
-     * Закрывает открытый solo-слот (candidate was null): переводит в ACCEPTED; второй участник создаётся в {@link com.interviewpartner.bot.model.Interview}.
+     * Закрывает открытый слот: переводит заявку в ACCEPTED; второй участник создаётся в {@link com.interviewpartner.bot.model.Interview}.
      */
     InterviewRequest completeOpenSlotWithJoiner(Long openSlotRequestId,
                                                 Long joinerUserId,
@@ -41,4 +38,3 @@ public interface InterviewRequestService {
                                                 int durationMinutes,
                                                 LocalDateTime now);
 }
-

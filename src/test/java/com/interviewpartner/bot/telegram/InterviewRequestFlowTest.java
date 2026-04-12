@@ -25,6 +25,7 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
@@ -67,43 +68,16 @@ class InterviewRequestFlowTest {
     }
 
     @Test
-    void acceptRequest_shouldCreateInterviewAndNotifyBoth() throws Exception {
-        User candidate = userService.getUserById(1L);
-        User partner = userService.getUserById(2L);
-
-        InterviewRequest req = InterviewRequest.builder()
-                .id(10L)
-                .slotOwner(partner)
-                .candidate(candidate)
-                .language(Language.RUSSIAN)
-                .format(InterviewFormat.TECHNICAL)
-                .dateTime(LocalDateTime.of(2026, 3, 25, 19, 0))
-                .durationMinutes(60)
-                .status(InterviewRequestStatus.PENDING)
-                .createdAt(LocalDateTime.of(2026, 3, 18, 12, 0))
-                .build();
-
-        when(interviewRequestService.accept(eq(10L), eq(222L), any())).thenReturn(req);
-
-        Interview createdInterview = mock(Interview.class);
-        when(createdInterview.getId()).thenReturn(99L);
-        when(createdInterview.getVideoMeetingUrl()).thenReturn(null);
-        when(createdInterview.getCandidate()).thenReturn(candidate);
-        when(createdInterview.getInterviewer()).thenReturn(partner);
-        when(interviewService.createInterview(eq(1L), eq(2L), eq(Language.RUSSIAN), isNull(), eq(InterviewFormat.TECHNICAL), any(), eq(60), eq(true)))
-                .thenReturn(createdInterview);
-        when(interviewService.getInterviewWithParticipants(99L)).thenReturn(createdInterview);
-
+    void legacyIrAccept_showsStaleMessageAndDoesNotCreateInterview() throws Exception {
         Update update = mockCallbackUpdate(222L, 222L, "ir:accept:10");
         handler.handle(update, telegramClient);
 
-        verify(interviewService).createInterview(eq(1L), eq(2L), eq(Language.RUSSIAN), isNull(), eq(InterviewFormat.TECHNICAL), any(), eq(60), eq(true));
-        verify(interviewService).getInterviewWithParticipants(99L);
+        verify(interviewService, never()).createInterview(anyLong(), anyLong(), any(), any(), any(), any(), anyInt(), anyBoolean());
         verify(telegramClient, org.mockito.Mockito.atLeastOnce()).execute(any(SendMessage.class));
     }
 
     @Test
-    void confirmYes_shouldCreateInterviewRequest_notInterview() throws Exception {
+    void confirmYes_nonSolo_doesNotCallCreateRequest() throws Exception {
         long chatId = 111L;
         var state = stateService.startCreateInterview(chatId, 1L);
         state.candidateUserId = 1L;
@@ -114,26 +88,11 @@ class InterviewRequestFlowTest {
         state.durationMinutes = 60;
         state.openSlotRequestId = null;
 
-        InterviewRequest createdRequest = InterviewRequest.builder()
-                .id(77L)
-                .slotOwner(userService.getUserById(2L))
-                .candidate(userService.getUserById(1L))
-                .language(Language.RUSSIAN)
-                .format(InterviewFormat.TECHNICAL)
-                .dateTime(state.dateTime)
-                .durationMinutes(60)
-                .status(InterviewRequestStatus.PENDING)
-                .createdAt(LocalDateTime.of(2026, 4, 1, 12, 0))
-                .build();
-        when(interviewRequestService.createRequest(
-                eq(1L), eq(2L), eq(Language.RUSSIAN), eq(InterviewFormat.TECHNICAL), eq(state.dateTime), eq(60), isNull()))
-                .thenReturn(createdRequest);
-
         Update update = mockCallbackUpdate(chatId, 111L, "ci:confirm:yes");
         handler.handle(update, telegramClient);
 
-        verify(interviewRequestService).createRequest(
-                eq(1L), eq(2L), eq(Language.RUSSIAN), eq(InterviewFormat.TECHNICAL), eq(state.dateTime), eq(60), isNull());
+        verify(interviewRequestService, never()).createRequest(
+                anyLong(), anyLong(), any(), any(), any(), anyInt(), any());
         verify(interviewService, never()).createInterview(
                 eq(1L), eq(2L), eq(Language.RUSSIAN), isNull(), eq(InterviewFormat.TECHNICAL), any(), eq(60), eq(true));
         verify(telegramClient, org.mockito.Mockito.atLeastOnce()).execute(any(SendMessage.class));
@@ -156,7 +115,6 @@ class InterviewRequestFlowTest {
         InterviewRequest acceptedRequest = InterviewRequest.builder()
                 .id(555L)
                 .slotOwner(partnerUser)
-                .candidate(null)
                 .language(Language.RUSSIAN)
                 .level(Level.SENIOR)
                 .format(InterviewFormat.TECHNICAL)
@@ -183,7 +141,6 @@ class InterviewRequestFlowTest {
 
         verify(interviewRequestService, never()).createRequest(
                 anyLong(), anyLong(), any(), any(), any(), anyInt(), any());
-        verify(interviewRequestService, never()).accept(any(Long.class), anyLong(), any());
         verify(interviewRequestService).completeOpenSlotWithJoiner(
                 eq(555L), eq(1L), eq(Language.RUSSIAN), eq(InterviewFormat.TECHNICAL), eq(state.dateTime), eq(60), any());
         verify(interviewService).createInterview(eq(1L), eq(2L), eq(Language.RUSSIAN), eq(Level.SENIOR), eq(InterviewFormat.TECHNICAL), any(), eq(60), eq(true));
@@ -206,4 +163,3 @@ class InterviewRequestFlowTest {
         return update;
     }
 }
-

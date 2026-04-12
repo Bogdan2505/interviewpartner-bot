@@ -17,7 +17,6 @@ public interface InterviewRequestRepository extends JpaRepository<InterviewReque
 
     @Query("""
             select r from InterviewRequest r
-            left join fetch r.candidate
             join fetch r.slotOwner
             where r.id = :id and r.status = :status
             """)
@@ -25,9 +24,8 @@ public interface InterviewRequestRepository extends JpaRepository<InterviewReque
 
     @Query("""
             select r from InterviewRequest r
-            left join fetch r.candidate
             join fetch r.slotOwner
-            where (r.slotOwner.id = :userId or (r.candidate is not null and r.candidate.id = :userId))
+            where r.slotOwner.id = :userId
               and (:status is null or r.status = :status)
             order by r.dateTime desc
             """)
@@ -37,8 +35,7 @@ public interface InterviewRequestRepository extends JpaRepository<InterviewReque
     @Query("""
             select r from InterviewRequest r
             join fetch r.slotOwner
-            where r.candidate is null
-              and r.language = :language
+            where r.language = :language
               and r.status = com.interviewpartner.bot.model.InterviewRequestStatus.PENDING
               and r.dateTime > :now
               and r.slotOwner.id <> :excludeUserId
@@ -48,7 +45,7 @@ public interface InterviewRequestRepository extends JpaRepository<InterviewReque
                                                 @Param("excludeUserId") Long excludeUserId,
                                                 @Param("now") LocalDateTime now);
 
-    boolean existsBySlotOwnerIdAndCandidateIsNullAndLanguageAndFormatAndDateTimeAndDurationMinutesAndStatusAndLevel(
+    boolean existsBySlotOwnerIdAndLanguageAndFormatAndDateTimeAndDurationMinutesAndStatusAndLevel(
             Long slotOwnerId,
             Language language,
             InterviewFormat format,
@@ -56,15 +53,5 @@ public interface InterviewRequestRepository extends JpaRepository<InterviewReque
             Integer durationMinutes,
             InterviewRequestStatus status,
             Level level
-    );
-
-    boolean existsBySlotOwnerIdAndCandidateIdAndLanguageAndFormatAndDateTimeAndDurationMinutesAndStatus(
-            Long slotOwnerId,
-            Long candidateId,
-            Language language,
-            InterviewFormat format,
-            LocalDateTime dateTime,
-            Integer durationMinutes,
-            InterviewRequestStatus status
     );
 }

@@ -109,4 +109,12 @@
                 stripComments="true"/>
     </changeSet>
 
+    <changeSet id="014-drop-interview-requests-candidate" author="interviewpartner">
+        <sqlFile
+                path="sql/014_drop_interview_requests_candidate.sql"
+                relativeToChangelogFile="true"
+                splitStatements="true"
+                stripComments="true"/>
+    </changeSet>
+
 </databaseChangeLog>

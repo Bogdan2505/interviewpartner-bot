@@ -67,10 +67,10 @@ class OpenSlotBookingIntegrationTest {
 
         assertThat(interviewRequestRepository.findAll()).hasSize(2);
         assertThat(interviewRequestRepository.findAll())
-                .allMatch(r -> r.getStatus() == InterviewRequestStatus.ACCEPTED && r.getCandidate() == null);
+                .allMatch(r -> r.getStatus() == InterviewRequestStatus.ACCEPTED);
 
         long orphanPending = interviewRequestRepository.findAll().stream()
-                .filter(r -> r.getStatus() == InterviewRequestStatus.PENDING && r.getCandidate() == null)
+                .filter(r -> r.getStatus() == InterviewRequestStatus.PENDING)
                 .count();
         assertThat(orphanPending).isZero();
 
