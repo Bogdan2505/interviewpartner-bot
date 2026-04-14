@@ -1553,6 +1553,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
         var java = InlineKeyboardButton.builder().text("Java").callbackData("ci:lang:JAVA").build();
         var python = InlineKeyboardButton.builder().text("Python").callbackData("ci:lang:PYTHON").build();
         var csharp = InlineKeyboardButton.builder().text("C#").callbackData("ci:lang:CSHARP").build();
+        var cpp = InlineKeyboardButton.builder().text("C++").callbackData("ci:lang:CPP").build();
         var algorithms = InlineKeyboardButton.builder().text("Algorithms").callbackData("ci:lang:ALGORITHMS").build();
         var productManager = InlineKeyboardButton.builder().text("Product Manager").callbackData("ci:lang:PRODUCT_MANAGER").build();
         var js = InlineKeyboardButton.builder().text("JavaScript").callbackData("ci:lang:JAVASCRIPT").build();
@@ -1565,8 +1566,8 @@ public class CallbackQueryHandler implements BotCommandHandler {
         var sa = InlineKeyboardButton.builder().text("System Analysis").callbackData("ci:lang:SYSTEM_ANALYSIS").build();
         var cancel = InlineKeyboardButton.builder().text("Отмена").callbackData("ci:cancel").build();
         return InlineKeyboardMarkup.builder().keyboard(List.of(
-                new InlineKeyboardRow(java, python ),
-                new InlineKeyboardRow(csharp, algorithms, productManager, js),
+                new InlineKeyboardRow(java, csharp, cpp),
+                new InlineKeyboardRow(python, algorithms, productManager, js),
                 new InlineKeyboardRow(kotlin, swift),
                 new InlineKeyboardRow(go, qa),
                 new InlineKeyboardRow(data, ba),
@@ -1578,6 +1579,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
     private static InlineKeyboardMarkup availableSlotsLanguageKeyboard() {
         var java = InlineKeyboardButton.builder().text("Java").callbackData("as:lang:JAVA").build();
         var csharp = InlineKeyboardButton.builder().text("C#").callbackData("as:lang:CSHARP").build();
+        var cpp = InlineKeyboardButton.builder().text("C++").callbackData("as:lang:CPP").build();
         var python = InlineKeyboardButton.builder().text("Python").callbackData("as:lang:PYTHON").build();
         var algorithms = InlineKeyboardButton.builder().text("Algorithms").callbackData("as:lang:ALGORITHMS").build();
         var productManager = InlineKeyboardButton.builder().text("Product Manager").callbackData("as:lang:PRODUCT_MANAGER").build();
@@ -1591,7 +1593,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
         var sa = InlineKeyboardButton.builder().text("System Analysis").callbackData("as:lang:SYSTEM_ANALYSIS").build();
         var cancel = InlineKeyboardButton.builder().text("Отмена").callbackData("as:cancel").build();
         return InlineKeyboardMarkup.builder().keyboard(List.of(
-                new InlineKeyboardRow(java, csharp),
+                new InlineKeyboardRow(java, csharp, cpp),
                 new InlineKeyboardRow(python, algorithms, productManager, js),
                 new InlineKeyboardRow(kotlin, swift),
                 new InlineKeyboardRow(go, qa),

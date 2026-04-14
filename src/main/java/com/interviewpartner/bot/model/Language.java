@@ -3,6 +3,7 @@ package com.interviewpartner.bot.model;
 public enum Language {
     JAVA,
     CSHARP,
+    CPP,
     PYTHON,
     ALGORITHMS,
     PRODUCT_MANAGER,

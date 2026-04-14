@@ -65,7 +65,8 @@ public class AvailableSlotsCommandHandler implements BotCommandHandler {
         return InlineKeyboardMarkup.builder().keyboard(List.of(
                 new InlineKeyboardRow(
                         InlineKeyboardButton.builder().text("Java").callbackData("as:lang:JAVA").build(),
-                        InlineKeyboardButton.builder().text("C#").callbackData("as:lang:CSHARP").build()),
+                        InlineKeyboardButton.builder().text("C#").callbackData("as:lang:CSHARP").build(),
+                        InlineKeyboardButton.builder().text("C++").callbackData("as:lang:CPP").build()),
                 new InlineKeyboardRow(
                         InlineKeyboardButton.builder().text("Python").callbackData("as:lang:PYTHON").build(),
                         InlineKeyboardButton.builder().text("Algorithms").callbackData("as:lang:ALGORITHMS").build(),
