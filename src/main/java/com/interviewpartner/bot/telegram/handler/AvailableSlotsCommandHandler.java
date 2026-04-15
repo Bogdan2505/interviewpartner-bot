@@ -81,7 +81,8 @@ public class AvailableSlotsCommandHandler implements BotCommandHandler {
                         InlineKeyboardButton.builder().text("Data Analytics").callbackData("as:lang:DATA_ANALYTICS").build()),
                 new InlineKeyboardRow(
                         InlineKeyboardButton.builder().text("Business Analysis").callbackData("as:lang:BUSINESS_ANALYSIS").build(),
-                        InlineKeyboardButton.builder().text("System Analysis").callbackData("as:lang:SYSTEM_ANALYSIS").build()),
+                        InlineKeyboardButton.builder().text("System Analysis").callbackData("as:lang:SYSTEM_ANALYSIS").build(),
+                        InlineKeyboardButton.builder().text("ИБ").callbackData("as:lang:INFORMATION_SECURITY").build()),
                 new InlineKeyboardRow(
                         InlineKeyboardButton.builder().text("Отмена").callbackData("as:cancel").build())
         )).build();

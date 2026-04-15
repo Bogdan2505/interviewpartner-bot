@@ -82,7 +82,8 @@ public class CreateInterviewCommandHandler implements BotCommandHandler {
                         InlineKeyboardButton.builder().text("Data Analytics").callbackData("ci:lang:DATA_ANALYTICS").build()),
                 new InlineKeyboardRow(
                         InlineKeyboardButton.builder().text("Business Analysis").callbackData("ci:lang:BUSINESS_ANALYSIS").build(),
-                        InlineKeyboardButton.builder().text("System Analysis").callbackData("ci:lang:SYSTEM_ANALYSIS").build()),
+                        InlineKeyboardButton.builder().text("System Analysis").callbackData("ci:lang:SYSTEM_ANALYSIS").build(),
+                        InlineKeyboardButton.builder().text("ИБ").callbackData("ci:lang:INFORMATION_SECURITY").build()),
                 new InlineKeyboardRow(
                         InlineKeyboardButton.builder().text("Отмена").callbackData("ci:cancel").build())
         )).build();

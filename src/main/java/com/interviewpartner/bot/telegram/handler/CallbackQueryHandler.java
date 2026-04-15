@@ -1564,6 +1564,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
         var data = InlineKeyboardButton.builder().text("Data Analytics").callbackData("ci:lang:DATA_ANALYTICS").build();
         var ba = InlineKeyboardButton.builder().text("Business Analysis").callbackData("ci:lang:BUSINESS_ANALYSIS").build();
         var sa = InlineKeyboardButton.builder().text("System Analysis").callbackData("ci:lang:SYSTEM_ANALYSIS").build();
+        var infosec = InlineKeyboardButton.builder().text("ИБ").callbackData("ci:lang:INFORMATION_SECURITY").build();
         var cancel = InlineKeyboardButton.builder().text("Отмена").callbackData("ci:cancel").build();
         return InlineKeyboardMarkup.builder().keyboard(List.of(
                 new InlineKeyboardRow(java, csharp, cpp),
@@ -1571,7 +1572,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
                 new InlineKeyboardRow(kotlin, swift),
                 new InlineKeyboardRow(go, qa),
                 new InlineKeyboardRow(data, ba),
-                new InlineKeyboardRow(sa),
+                new InlineKeyboardRow(sa, infosec),
                 new InlineKeyboardRow(cancel)
         )).build();
     }
@@ -1591,6 +1592,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
         var data = InlineKeyboardButton.builder().text("Data Analytics").callbackData("as:lang:DATA_ANALYTICS").build();
         var ba = InlineKeyboardButton.builder().text("Business Analysis").callbackData("as:lang:BUSINESS_ANALYSIS").build();
         var sa = InlineKeyboardButton.builder().text("System Analysis").callbackData("as:lang:SYSTEM_ANALYSIS").build();
+        var infosec = InlineKeyboardButton.builder().text("ИБ").callbackData("as:lang:INFORMATION_SECURITY").build();
         var cancel = InlineKeyboardButton.builder().text("Отмена").callbackData("as:cancel").build();
         return InlineKeyboardMarkup.builder().keyboard(List.of(
                 new InlineKeyboardRow(java, csharp, cpp),
@@ -1598,7 +1600,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
                 new InlineKeyboardRow(kotlin, swift),
                 new InlineKeyboardRow(go, qa),
                 new InlineKeyboardRow(data, ba),
-                new InlineKeyboardRow(sa),
+                new InlineKeyboardRow(sa, infosec),
                 new InlineKeyboardRow(cancel)
         )).build();
     }
