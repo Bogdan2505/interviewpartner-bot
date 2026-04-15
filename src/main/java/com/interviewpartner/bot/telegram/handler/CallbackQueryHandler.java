@@ -1567,9 +1567,11 @@ public class CallbackQueryHandler implements BotCommandHandler {
         var infosec = InlineKeyboardButton.builder().text("ИБ").callbackData("ci:lang:INFORMATION_SECURITY").build();
         var cancel = InlineKeyboardButton.builder().text("Отмена").callbackData("ci:cancel").build();
         return InlineKeyboardMarkup.builder().keyboard(List.of(
-                new InlineKeyboardRow(java, csharp, cpp),
-                new InlineKeyboardRow(python, algorithms, productManager, js),
-                new InlineKeyboardRow(kotlin, swift),
+                new InlineKeyboardRow(java, csharp),
+                new InlineKeyboardRow(cpp, python),
+                new InlineKeyboardRow(algorithms, productManager),
+                new InlineKeyboardRow(js, kotlin),
+                new InlineKeyboardRow(swift),
                 new InlineKeyboardRow(go, qa),
                 new InlineKeyboardRow(data, ba),
                 new InlineKeyboardRow(sa, infosec),
@@ -1595,9 +1597,11 @@ public class CallbackQueryHandler implements BotCommandHandler {
         var infosec = InlineKeyboardButton.builder().text("ИБ").callbackData("as:lang:INFORMATION_SECURITY").build();
         var cancel = InlineKeyboardButton.builder().text("Отмена").callbackData("as:cancel").build();
         return InlineKeyboardMarkup.builder().keyboard(List.of(
-                new InlineKeyboardRow(java, csharp, cpp),
-                new InlineKeyboardRow(python, algorithms, productManager, js),
-                new InlineKeyboardRow(kotlin, swift),
+                new InlineKeyboardRow(java, csharp),
+                new InlineKeyboardRow(cpp, python),
+                new InlineKeyboardRow(algorithms, productManager),
+                new InlineKeyboardRow(js, kotlin),
+                new InlineKeyboardRow(swift),
                 new InlineKeyboardRow(go, qa),
                 new InlineKeyboardRow(data, ba),
                 new InlineKeyboardRow(sa, infosec),

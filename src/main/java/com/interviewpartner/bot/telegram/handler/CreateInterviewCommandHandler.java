@@ -66,22 +66,25 @@ public class CreateInterviewCommandHandler implements BotCommandHandler {
         return InlineKeyboardMarkup.builder().keyboard(List.of(
                 new InlineKeyboardRow(
                         InlineKeyboardButton.builder().text("Java").callbackData("ci:lang:JAVA").build(),
-                        InlineKeyboardButton.builder().text("C#").callbackData("ci:lang:CSHARP").build(),
-                        InlineKeyboardButton.builder().text("C++").callbackData("ci:lang:CPP").build()),
+                        InlineKeyboardButton.builder().text("C#").callbackData("ci:lang:CSHARP").build()),
                 new InlineKeyboardRow(
-                        InlineKeyboardButton.builder().text("Python").callbackData("ci:lang:PYTHON").build(),
+                        InlineKeyboardButton.builder().text("C++").callbackData("ci:lang:CPP").build(),
+                        InlineKeyboardButton.builder().text("Python").callbackData("ci:lang:PYTHON").build()),
+                new InlineKeyboardRow(
                         InlineKeyboardButton.builder().text("Algorithms").callbackData("ci:lang:ALGORITHMS").build(),
-                        InlineKeyboardButton.builder().text("Product Manager").callbackData("ci:lang:PRODUCT_MANAGER").build(),
-                        InlineKeyboardButton.builder().text("JavaScript").callbackData("ci:lang:JAVASCRIPT").build()),
+                        InlineKeyboardButton.builder().text("Product Manager").callbackData("ci:lang:PRODUCT_MANAGER").build()),
                 new InlineKeyboardRow(
-                        InlineKeyboardButton.builder().text("Kotlin").callbackData("ci:lang:KOTLIN").build(),
+                        InlineKeyboardButton.builder().text("JavaScript").callbackData("ci:lang:JAVASCRIPT").build(),
+                        InlineKeyboardButton.builder().text("Kotlin").callbackData("ci:lang:KOTLIN").build()),
+                new InlineKeyboardRow(
                         InlineKeyboardButton.builder().text("Swift").callbackData("ci:lang:SWIFT").build()),
                 new InlineKeyboardRow(
                         InlineKeyboardButton.builder().text("Go").callbackData("ci:lang:GO").build(),
-                        InlineKeyboardButton.builder().text("QA").callbackData("ci:lang:QA").build(),
-                        InlineKeyboardButton.builder().text("Data Analytics").callbackData("ci:lang:DATA_ANALYTICS").build()),
+                        InlineKeyboardButton.builder().text("QA").callbackData("ci:lang:QA").build()),
                 new InlineKeyboardRow(
-                        InlineKeyboardButton.builder().text("Business Analysis").callbackData("ci:lang:BUSINESS_ANALYSIS").build(),
+                        InlineKeyboardButton.builder().text("Data Analytics").callbackData("ci:lang:DATA_ANALYTICS").build(),
+                        InlineKeyboardButton.builder().text("Business Analysis").callbackData("ci:lang:BUSINESS_ANALYSIS").build()),
+                new InlineKeyboardRow(
                         InlineKeyboardButton.builder().text("System Analysis").callbackData("ci:lang:SYSTEM_ANALYSIS").build(),
                         InlineKeyboardButton.builder().text("ИБ").callbackData("ci:lang:INFORMATION_SECURITY").build()),
                 new InlineKeyboardRow(
