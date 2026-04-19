@@ -117,4 +117,12 @@
                 stripComments="true"/>
     </changeSet>
 
+    <changeSet id="015-hot-query-indexes" author="interviewpartner">
+        <sqlFile
+                path="sql/015_hot_query_indexes.sql"
+                relativeToChangelogFile="true"
+                splitStatements="true"
+                stripComments="true"/>
+    </changeSet>
+
 </databaseChangeLog>

@@ -4,6 +4,7 @@ import com.interviewpartner.bot.config.TelegramBotProperties;
 import com.interviewpartner.bot.model.Interview;
 import com.interviewpartner.bot.model.ReminderType;
 import com.interviewpartner.bot.model.User;
+import com.interviewpartner.bot.telegram.handler.TelegramScheduleUi;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
@@ -48,7 +49,9 @@ public class TelegramReminderSender implements ReminderSender {
             case HOURS_1 -> "Напоминание: до встречи 1 час.";
             case MINUTES_15 -> "Напоминание: до встречи 15 минут.";
             case START -> "Встреча начинается сейчас.";
-        } + "\nДата/время (старт часа): " + interview.getDateTime().atZone(applicationZoneId).format(DT);
+        } + "\nДата/время (старт часа): " + interview.getDateTime().atZone(applicationZoneId).format(DT)
+                + "\nГрейд: " + TelegramScheduleUi.levelLabel(interview.getLevel())
+                + "\nТема: " + TelegramScheduleUi.languageLabel(interview.getLanguage());
         String joinUrl = resolveMeetingUrl(interview);
         User candidate = interview.getCandidate();
         User interviewer = interview.getInterviewer();
@@ -64,7 +67,7 @@ public class TelegramReminderSender implements ReminderSender {
                 String mutualLine = "\nФормат: 60 мин, взаимная практика (~30 мин + ~30 мин)."
                         + (viewerIsCandidate
                         ? "\nПервая половина: вас собеседует " + formatUserLabel(interviewer) + ". Вторая: вы собеседуете партнёра."
-                        : "\nПервая половина: вы собеседуете " + formatUserLabel(candidate) + ". Вторая: партнёр собеседует вас.");
+                        : "\nПервая половина: вы собеседуете. Вторая: партнёр собеседует вас.");
                 String text = reminderText
                         + mutualLine
                         + "\nПартнёр: " + formatUserLabel(partner);

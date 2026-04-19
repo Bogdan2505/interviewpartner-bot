@@ -36,23 +36,16 @@ class NotificationDispatchStaleReminderTest {
     }
 
     @Test
-    void start_skippedWhenBeforeScheduledTime() {
+    void start_alwaysSkippedAfterSimplification() {
         Interview interview = mock(Interview.class);
         when(interview.getDateTime()).thenReturn(now.plusMinutes(5));
         assertThat(NotificationDispatchService.shouldSkipStaleReminder(interview, ReminderType.START, now)).isTrue();
     }
 
     @Test
-    void start_notSkippedWhenJustAfterStart() {
+    void hours1_alwaysSkippedAfterSimplification() {
         Interview interview = mock(Interview.class);
         when(interview.getDateTime()).thenReturn(now);
-        assertThat(NotificationDispatchService.shouldSkipStaleReminder(interview, ReminderType.START, now)).isFalse();
-    }
-
-    @Test
-    void start_skippedWhenMoreThanTwoHoursAfterStart() {
-        Interview interview = mock(Interview.class);
-        when(interview.getDateTime()).thenReturn(now.minusHours(3));
-        assertThat(NotificationDispatchService.shouldSkipStaleReminder(interview, ReminderType.START, now)).isTrue();
+        assertThat(NotificationDispatchService.shouldSkipStaleReminder(interview, ReminderType.HOURS_1, now)).isTrue();
     }
 }

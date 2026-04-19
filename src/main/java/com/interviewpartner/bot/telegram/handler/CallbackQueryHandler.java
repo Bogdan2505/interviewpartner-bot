@@ -864,6 +864,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
             }
             return;
         }
+        UserScheduleSnapshot scheduleSnapshot = loadUserScheduleSnapshot(state.userId);
 
         if (data.equals("ic:close")) {
             stateService.clearInterviewCalendar(chatId);
@@ -908,7 +909,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
                 return;
             }
             try {
-                InterviewRequest before = interviewRequestService.getUserRequests(state.userId, null).stream()
+                InterviewRequest before = scheduleSnapshot.requests().stream()
                         .filter(r -> requestId.equals(r.getId()))
                         .findFirst()
                         .orElseThrow(() -> new IllegalArgumentException("Request not found"));
@@ -918,7 +919,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
                     return;
                 }
                 java.util.Optional<Interview> linkedInterview = before.getStatus() == InterviewRequestStatus.ACCEPTED
-                        ? findScheduledInterviewByRequest(before)
+                        ? findScheduledInterviewByRequest(before, scheduleSnapshot.interviewByRequestKey())
                         : java.util.Optional.empty();
                 InterviewRequest cancelled = interviewRequestService.cancel(requestId, fromUser.getId(), LocalDateTime.now(clock));
                 boolean wasAccepted = before.getStatus() == InterviewRequestStatus.ACCEPTED;
@@ -991,8 +992,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
             state.selectedDate = day;
 
             LocalDate today = LocalDate.now(clock);
-            List<InterviewRequest> scheduled = interviewRequestService.getUserRequests(state.userId, null);
-            List<InterviewRequest> forDay = scheduled.stream()
+            List<InterviewRequest> forDay = scheduleSnapshot.requests().stream()
                     .filter(i -> !i.getDateTime().toLocalDate().isBefore(today))
                     .filter(i -> i.getDateTime().toLocalDate().equals(day))
                     .filter(i -> i.getStatus() != InterviewRequestStatus.DECLINED
@@ -1005,7 +1005,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
                 EnumSet<InterviewRequestStatus> statuses = hourStatuses.computeIfAbsent(hour, h -> EnumSet.noneOf(InterviewRequestStatus.class));
                 statuses.add(i.getStatus());
             }
-            for (Interview iv : interviewService.getUserInterviews(state.userId, InterviewStatus.SCHEDULED)) {
+            for (Interview iv : scheduleSnapshot.interviews()) {
                 if (iv.getDateTime() == null || !iv.getDateTime().toLocalDate().equals(day)) {
                     continue;
                 }
@@ -1062,8 +1062,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
             }
 
             LocalDate today = LocalDate.now(clock);
-            List<InterviewRequest> scheduled = interviewRequestService.getUserRequests(state.userId, null);
-            List<InterviewRequest> bookedList = scheduled.stream()
+            List<InterviewRequest> bookedList = scheduleSnapshot.requests().stream()
                     .filter(i -> !i.getDateTime().toLocalDate().isBefore(today))
                     .filter(i -> i.getDateTime().toLocalDate().equals(day))
                     .filter(i -> i.getDateTime().getHour() == hour)
@@ -1074,17 +1073,17 @@ public class CallbackQueryHandler implements BotCommandHandler {
             bookedList = compactHourDetailsHidePendingWhenAccepted(bookedList);
             bookedList = bookedList.stream()
                     .filter(r -> !(r.getStatus() == InterviewRequestStatus.ACCEPTED
-                            && findScheduledInterviewByRequest(r).isPresent()))
+                            && findScheduledInterviewByRequest(r, scheduleSnapshot.interviewByRequestKey()).isPresent()))
                     .toList();
             final List<InterviewRequest> bookedListFinal = bookedList;
 
-            List<Interview> interviewsAtHour = interviewService.getUserInterviews(state.userId, InterviewStatus.SCHEDULED).stream()
+            List<Interview> interviewsAtHour = scheduleSnapshot.interviews().stream()
                     .filter(i -> i.getDateTime() != null
                             && !i.getDateTime().toLocalDate().isBefore(today)
                             && i.getDateTime().toLocalDate().equals(day)
                             && i.getDateTime().getHour() == hour)
                     .filter(i -> bookedListFinal.stream().noneMatch(r ->
-                            findScheduledInterviewByRequest(r).map(iv -> iv.getId().equals(i.getId())).orElse(false)))
+                            findScheduledInterviewByRequest(r, scheduleSnapshot.interviewByRequestKey()).map(iv -> iv.getId().equals(i.getId())).orElse(false)))
                     .sorted(java.util.Comparator.comparing(Interview::getDateTime))
                     .toList();
 
@@ -1099,7 +1098,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
                 for (InterviewRequest booked : bookedList) {
                     String time = booked.getDateTime().format(timeFmt);
                     if (sb.length() > 0) sb.append("\n\n");
-                    User partner = schedulePartnerForViewer(booked, state.userId);
+                    User partner = schedulePartnerForViewer(booked, state.userId, scheduleSnapshot.interviewByRequestKey());
                     String partnerLabel = (partner != null && partner.getUsername() != null)
                             ? "@" + partner.getUsername()
                             : (partner != null ? "пользователь #" + partner.getId() : "—");
@@ -1541,12 +1540,7 @@ public class CallbackQueryHandler implements BotCommandHandler {
     }
 
     private static String levelLabel(Level level) {
-        if (level == null) return "—";
-        return switch (level) {
-            case JUNIOR -> "Junior";
-            case MIDDLE -> "Middle";
-            case SENIOR -> "Senior";
-        };
+        return TelegramScheduleUi.levelLabel(level);
     }
 
     private static InlineKeyboardMarkup createInterviewLanguageKeyboard() {
@@ -1719,11 +1713,15 @@ public class CallbackQueryHandler implements BotCommandHandler {
      * Второй участник для экрана расписания: не совпадает с просматривающим.
      * Для заявки после записи на открытый слот второй участник берётся из {@link Interview}.
      */
-    private User schedulePartnerForViewer(InterviewRequest request, Long viewerUserId) {
+    private User schedulePartnerForViewer(
+            InterviewRequest request,
+            Long viewerUserId,
+            Map<RequestInterviewKey, Interview> interviewByRequestKey
+    ) {
         if (request.getSlotOwner() == null || viewerUserId == null) {
             return null;
         }
-        return findScheduledInterviewByRequest(request)
+        return findScheduledInterviewByRequest(request, interviewByRequestKey)
                 .map(i -> {
                     Long ownerId = request.getSlotOwner().getId();
                     if (viewerUserId.equals(ownerId)) {
@@ -1737,19 +1735,75 @@ public class CallbackQueryHandler implements BotCommandHandler {
                 .orElse(null);
     }
 
-    private Optional<Interview> findScheduledInterviewByRequest(InterviewRequest request) {
-        if (request == null || request.getSlotOwner() == null || request.getSlotOwner().getId() == null) {
+    private Optional<Interview> findScheduledInterviewByRequest(
+            InterviewRequest request,
+            Map<RequestInterviewKey, Interview> interviewByRequestKey
+    ) {
+        if (request == null || interviewByRequestKey == null || interviewByRequestKey.isEmpty()) {
             return Optional.empty();
         }
-        Long ownerId = request.getSlotOwner().getId();
-        return interviewService.getUserInterviews(ownerId, InterviewStatus.SCHEDULED).stream()
-                .filter(i -> i.getCandidate() != null && i.getInterviewer() != null)
-                .filter(i -> ownerId.equals(i.getInterviewer().getId()))
-                .filter(i -> i.getDateTime().equals(request.getDateTime()))
-                .filter(i -> i.getDuration().equals(request.getDurationMinutes()))
-                .filter(i -> i.getLanguage() == request.getLanguage())
-                .filter(i -> i.getFormat() == request.getFormat())
-                .findFirst();
+        RequestInterviewKey key = RequestInterviewKey.fromRequest(request);
+        if (key == null) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(interviewByRequestKey.get(key));
+    }
+
+    private UserScheduleSnapshot loadUserScheduleSnapshot(Long userId) {
+        if (userId == null) {
+            return UserScheduleSnapshot.empty();
+        }
+        List<InterviewRequest> requests = interviewRequestService.getUserRequests(userId, null);
+        List<Interview> interviews = interviewService.getUserInterviews(userId, InterviewStatus.SCHEDULED);
+        Map<RequestInterviewKey, Interview> interviewByRequestKey = interviews.stream()
+                .map(i -> Map.entry(RequestInterviewKey.fromInterview(i), i))
+                .filter(e -> e.getKey() != null)
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (left, right) -> left));
+        return new UserScheduleSnapshot(requests, interviews, interviewByRequestKey);
+    }
+
+    private record UserScheduleSnapshot(
+            List<InterviewRequest> requests,
+            List<Interview> interviews,
+            Map<RequestInterviewKey, Interview> interviewByRequestKey
+    ) {
+        private static UserScheduleSnapshot empty() {
+            return new UserScheduleSnapshot(List.of(), List.of(), Map.of());
+        }
+    }
+
+    private record RequestInterviewKey(
+            Long ownerId,
+            LocalDateTime dateTime,
+            Integer durationMinutes,
+            Language language,
+            InterviewFormat format
+    ) {
+        private static RequestInterviewKey fromRequest(InterviewRequest request) {
+            if (request == null || request.getSlotOwner() == null || request.getSlotOwner().getId() == null) {
+                return null;
+            }
+            return new RequestInterviewKey(
+                    request.getSlotOwner().getId(),
+                    request.getDateTime(),
+                    request.getDurationMinutes(),
+                    request.getLanguage(),
+                    request.getFormat()
+            );
+        }
+
+        private static RequestInterviewKey fromInterview(Interview interview) {
+            if (interview == null || interview.getInterviewer() == null || interview.getInterviewer().getId() == null) {
+                return null;
+            }
+            return new RequestInterviewKey(
+                    interview.getInterviewer().getId(),
+                    interview.getDateTime(),
+                    interview.getDuration(),
+                    interview.getLanguage(),
+                    interview.getFormat()
+            );
+        }
     }
 
     /** Callback до выбора языка/формата (или отмена). */

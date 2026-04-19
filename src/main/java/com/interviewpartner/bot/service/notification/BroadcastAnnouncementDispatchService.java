@@ -34,22 +34,23 @@ public class BroadcastAnnouncementDispatchService {
     private final TelegramBotProperties botProperties;
     private final Clock clock;
 
-    public void dispatchDue() {
+    public boolean dispatchDue() {
         LocalDateTime now = LocalDateTime.now(clock);
         List<BroadcastAnnouncement> due = announcementRepository.findDueForBroadcast(now);
         if (due.isEmpty()) {
-            return;
+            return false;
         }
         List<Long> chatIds = userRepository.findAllTelegramIds();
         if (chatIds.isEmpty()) {
             log.debug("Broadcast: нет пользователей в БД, рассылка отложена");
-            return;
+            return false;
         }
 
         TelegramClient client = new OkHttpTelegramClient(botProperties.getToken());
         for (BroadcastAnnouncement announcement : due) {
             dispatchOne(client, announcement, chatIds, now);
         }
+        return true;
     }
 
     private void dispatchOne(

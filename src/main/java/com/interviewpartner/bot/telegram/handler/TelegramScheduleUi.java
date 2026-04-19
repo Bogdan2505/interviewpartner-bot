@@ -3,6 +3,7 @@ package com.interviewpartner.bot.telegram.handler;
 import com.interviewpartner.bot.model.InterviewFormat;
 import com.interviewpartner.bot.model.InterviewRequestStatus;
 import com.interviewpartner.bot.model.Language;
+import com.interviewpartner.bot.model.Level;
 
 import java.util.EnumSet;
 
@@ -19,6 +20,44 @@ public final class TelegramScheduleUi {
     public static final String DAY_HAS_ACTIVITY = "✅";
 
     private TelegramScheduleUi() {
+    }
+
+    /** Подпись грейда как в выборе при записи; null — «любой» / не указан. */
+    public static String levelLabel(Level level) {
+        if (level == null) {
+            return "—";
+        }
+        return switch (level) {
+            case JUNIOR -> "Junior";
+            case MIDDLE -> "Middle";
+            case SENIOR -> "Senior";
+        };
+    }
+
+    /** Человекочитаемое направление/язык собеседования (как подписи кнопок выбора). */
+    public static String languageLabel(Language language) {
+        if (language == null) {
+            return "—";
+        }
+        return switch (language) {
+            case JAVA -> "Java";
+            case CSHARP -> "C#";
+            case CPP -> "C++";
+            case PYTHON -> "Python";
+            case ALGORITHMS -> "Algorithms";
+            case PRODUCT_MANAGER -> "Product Manager";
+            case JAVASCRIPT -> "JavaScript";
+            case KOTLIN -> "Kotlin";
+            case SWIFT -> "Swift";
+            case GO -> "Go";
+            case QA -> "QA";
+            case DATA_ANALYTICS -> "Data Analytics";
+            case BUSINESS_ANALYSIS -> "Business Analysis";
+            case SYSTEM_ANALYSIS -> "System Analysis";
+            case INFORMATION_SECURITY -> "ИБ";
+            case ENGLISH -> "English";
+            case RUSSIAN -> "Русский";
+        };
     }
 
     public static String legendRequestAndConfirmed() {

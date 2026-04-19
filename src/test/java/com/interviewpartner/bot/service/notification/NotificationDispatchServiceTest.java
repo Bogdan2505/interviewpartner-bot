@@ -34,7 +34,7 @@ class NotificationDispatchServiceTest {
     private com.interviewpartner.bot.repository.UserRepository userRepository;
 
     @Test
-    void ensureNotifications_shouldCreateAllReminderTypesOnce() {
+    void ensureNotifications_shouldCreateOnlyActiveReminderTypesOnce() {
         // sender отсутствует в DataJpaTest, поэтому Optional.empty()
         NotificationDispatchService service = new NotificationDispatchService(
                 interviewRepository,
@@ -60,9 +60,9 @@ class NotificationDispatchServiceTest {
         service.ensureNotificationsForUpcomingInterviews(now);
 
         var all = notificationRepository.findAll();
-        assertThat(all).hasSize(4);
+        assertThat(all).hasSize(2);
         assertThat(all).extracting(n -> n.getType()).containsExactlyInAnyOrder(
-                ReminderType.HOURS_24, ReminderType.HOURS_1, ReminderType.MINUTES_15, ReminderType.START
+                ReminderType.HOURS_24, ReminderType.MINUTES_15
         );
         assertThat(all).allMatch(n -> n.getInterview().getId().equals(interview.getId()));
     }
